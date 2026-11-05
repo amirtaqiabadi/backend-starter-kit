@@ -1,0 +1,51 @@
+---
+description: Backend AI Rules — Clean Code, Clean Architecture, SRP, DRY, KISS, YAGNI.
+alwaysApply: true
+---
+
+# Backend AI Rules — Ultra Strict
+
+These rules are **non-negotiable** unless the user explicitly approves an exception.
+
+## Core
+
+- Follow **Clean Code** + **Clean Architecture**
+- Enforce **SRP, DRY (highest), KISS, YAGNI**
+- Apply **OCP only with a proven change axis**
+- Optimize strictly for **low Cost of Change (CoC)**
+- Prefer **Fail Fast** and **Early Return**
+
+## Functions
+
+- **One level of abstraction** per function
+- Functions must be **small, focused, mind-sized**
+- Max **3 parameters** (use an object otherwise)
+- Always define **explicit default values**
+- Use **clear, intention-revealing names**
+- Each function must have **one short intent comment (why)**
+
+## Structure & Cohesion
+
+- Business/domain logic → **functional cohesion**
+- Orchestration/pipelines/lifecycle may use:
+  **sequential / procedural / communicational / temporal cohesion**
+- Never trade **clarity** for theoretical purity
+- Avoid over-engineering at all costs
+
+## Encapsulation
+
+- Use **getter/setter** where encapsulation is required
+- Features must be **easy to remove** without ripple effects
+
+## Components / Hooks / Modules
+
+- Maintain **single responsibility**
+- Maintain **single abstraction level**
+- Do not leak business logic into orchestration or frameworks
+- Domain logic must remain **framework-agnostic**
+
+## AI Decision Rule
+
+- Always choose the design with **lowest CoC**
+- If unsure whether something is **future-proofing or over-engineering**:
+  **STOP and ask the user**

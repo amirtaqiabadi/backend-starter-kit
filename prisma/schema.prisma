@@ -1,0 +1,32 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String    @id @default(cuid())
+  phoneNumber   String    @unique @map("phone_number")
+  passwordHash  String?   @map("password_hash")
+  passwordSetAt DateTime? @map("password_set_at")
+  lastLoginAt   DateTime? @map("last_login_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model AuthEvent {
+  id          String   @id @default(cuid())
+  userId      String?  @map("user_id")
+  phoneMasked String   @map("phone_masked")
+  type        String
+  ip          String
+  userAgent   String   @map("user_agent")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("auth_events")
+}
