@@ -46,6 +46,27 @@ export function readString(body: Record<string, unknown>, key: string, fallback 
   return typeof value === "string" ? value : fallback;
 }
 
+/** Why: integer JSON fields must stay whole numbers and not be parsed from strings with junk. */
+export function readInteger(body: Record<string, unknown>, key: string): number | null {
+  const value = body[key];
+  if (typeof value === "number" && Number.isInteger(value)) {
+    return value;
+  }
+  if (typeof value === "string" && /^-?\d+$/.test(value)) {
+    return Number(value);
+  }
+  return null;
+}
+
+/** Why: payment errors need a stable id even when the client omitted x-request-id. */
+export function requestTraceId(request: Request): string {
+  const header = request.headers.get("x-request-id")?.trim();
+  if (header) {
+    return header.slice(0, 128);
+  }
+  return crypto.randomUUID();
+}
+
 /** Why: the cookie jar is read without a framework helper so tests can use a plain Request. */
 export function readCookie(request: Request, name: string): string | null {
   const header = request.headers.get("cookie");

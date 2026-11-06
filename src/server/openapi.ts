@@ -6,9 +6,9 @@ export function openApiDocument() {
       title: "backend-starter-kit",
       version: "0.1.0",
       description:
-        "احراز هویت با شماره موبایل ایران. همهٔ درخواست‌های POST باید هدر Origin هم‌مبدأ با Host داشته باشند. نشست موفق در کوکی HttpOnly به نام session قرار می‌گیرد.",
+        "احراز هویت با شماره موبایل ایران و شارژ کیف‌پول زرین‌پال. همهٔ درخواست‌های POST باید هدر Origin هم‌مبدأ با Host داشته باشند. نشست موفق در کوکی HttpOnly به نام session قرار می‌گیرد. POSTهای کیف علاوه بر Origin به هدر x-csrf-token نیاز دارند.",
     },
-    tags: [{ name: "auth" }],
+    tags: [{ name: "auth" }, { name: "wallets" }, { name: "payment" }],
     paths: {
       "/api/auth/identify": {
         post: {
@@ -149,6 +149,180 @@ export function openApiDocument() {
           },
         },
       },
+      "/api/wallets": {
+        get: {
+          tags: ["wallets"],
+          summary: "لیست کیف‌های فعال",
+          security: [{ sessionCookie: [] }],
+          responses: {
+            "200": jsonResponse("کیف‌ها و موجودی دفترکل", {
+              type: "object",
+              required: ["wallets"],
+              properties: {
+                wallets: { type: "array", items: { $ref: "#/components/schemas/Wallet" } },
+              },
+            }),
+            "401": paymentErrorResponse,
+          },
+        },
+        post: {
+          tags: ["wallets"],
+          summary: "ساخت کیف جدید",
+          security: [{ sessionCookie: [] }],
+          requestBody: jsonBody({
+            properties: { displayName: { type: "string", minLength: 1, maxLength: 80 } },
+          }),
+          responses: {
+            "201": jsonResponse("کیف ساخته شد", { $ref: "#/components/schemas/Wallet" }),
+            "400": paymentErrorResponse,
+            "401": paymentErrorResponse,
+            "403": paymentErrorResponse,
+          },
+        },
+      },
+      "/api/wallets/{teamId}/transactions": {
+        get: {
+          tags: ["wallets"],
+          summary: "تاریخچهٔ دفترکل یک کیف",
+          security: [{ sessionCookie: [] }],
+          parameters: [{ name: "teamId", in: "path", required: true, schema: { type: "integer" } }],
+          responses: {
+            "200": jsonResponse("ردیف‌های دفترکل", {
+              type: "object",
+              required: ["transactions"],
+              properties: { transactions: { type: "array", items: { $ref: "#/components/schemas/LedgerRow" } } },
+            }),
+            "401": paymentErrorResponse,
+            "403": paymentErrorResponse,
+          },
+        },
+      },
+      "/api/payment/initiate": {
+        post: {
+          tags: ["payment"],
+          summary: "شروع شارژ با زرین‌پال",
+          security: [{ sessionCookie: [] }],
+          requestBody: jsonBody({
+            required: ["amount", "description"],
+            properties: {
+              amount: { type: "integer", minimum: 1000, description: "ریال" },
+              description: { type: "string", minLength: 1, maxLength: 500 },
+              teamId: { type: "integer" },
+            },
+          }),
+          responses: {
+            "200": jsonResponse("آدرس درگاه", {
+              type: "object",
+              required: ["paymentUrl", "attemptId"],
+              properties: {
+                paymentUrl: { type: "string" },
+                attemptId: { type: "integer" },
+              },
+            }),
+            "400": paymentErrorResponse,
+            "401": paymentErrorResponse,
+            "403": paymentErrorResponse,
+            "429": paymentErrorResponse,
+            "502": paymentErrorResponse,
+            "503": paymentErrorResponse,
+          },
+        },
+      },
+      "/api/payment/callback/zarinpal": {
+        get: {
+          tags: ["payment"],
+          summary: "بازگشت زرین‌پال",
+          description: "بدون نشست است و اول امضای HMAC را چک می‌کند. مرورگر را به صفحهٔ موفقیت یا شکست هدایت می‌کند.",
+          parameters: [
+            { name: "sig", in: "query", required: true, schema: { type: "string" } },
+            { name: "Authority", in: "query", required: true, schema: { type: "string" } },
+            { name: "Status", in: "query", required: true, schema: { type: "string", enum: ["OK", "NOK"] } },
+          ],
+          responses: {
+            "307": { description: "هدایت به صفحهٔ موفقیت یا شکست" },
+          },
+        },
+      },
+      "/api/payment/reverse": {
+        post: {
+          tags: ["payment"],
+          summary: "برگشت درگاه تا ۳۰ دقیقه",
+          security: [{ sessionCookie: [] }],
+          requestBody: jsonBody({
+            required: ["attemptId"],
+            properties: { attemptId: { type: "integer" } },
+          }),
+          responses: {
+            "200": jsonResponse("برگشت ثبت شد", {
+              type: "object",
+              required: ["attemptId"],
+              properties: { attemptId: { type: "integer" } },
+            }),
+            "400": paymentErrorResponse,
+            "401": paymentErrorResponse,
+            "403": paymentErrorResponse,
+            "409": paymentErrorResponse,
+            "502": paymentErrorResponse,
+          },
+        },
+      },
+      "/api/payment/refunds": {
+        get: {
+          tags: ["payment"],
+          summary: "لیست درخواست‌های استرداد کارت",
+          security: [{ sessionCookie: [] }],
+          parameters: [{ name: "teamId", in: "query", required: true, schema: { type: "integer" } }],
+          responses: {
+            "200": jsonResponse("درخواست‌ها با کارت ماسک‌شده", {
+              type: "object",
+              required: ["refunds"],
+              properties: { refunds: { type: "array", items: { $ref: "#/components/schemas/Refund" } } },
+            }),
+            "401": paymentErrorResponse,
+            "403": paymentErrorResponse,
+          },
+        },
+        post: {
+          tags: ["payment"],
+          summary: "ثبت درخواست استرداد دستی به کارت",
+          security: [{ sessionCookie: [] }],
+          requestBody: jsonBody({
+            required: ["transactionId", "cardNumber"],
+            properties: {
+              transactionId: { type: "integer" },
+              cardNumber: { type: "string", pattern: "^\\d{16}$" },
+            },
+          }),
+          responses: {
+            "201": jsonResponse("درخواست ثبت شد", { $ref: "#/components/schemas/Refund" }),
+            "400": paymentErrorResponse,
+            "401": paymentErrorResponse,
+            "403": paymentErrorResponse,
+            "409": paymentErrorResponse,
+          },
+        },
+      },
+      "/api/payment/recover": {
+        post: {
+          tags: ["payment"],
+          summary: "بازیابی پرداخت بدون کال‌بک",
+          security: [{ sessionCookie: [] }],
+          requestBody: jsonBody({
+            properties: { authority: { type: "string" } },
+          }),
+          responses: {
+            "200": jsonResponse("تعداد بازیابی‌شده", {
+              type: "object",
+              required: ["recovered"],
+              properties: { recovered: { type: "integer" } },
+            }),
+            "401": paymentErrorResponse,
+            "403": paymentErrorResponse,
+            "404": paymentErrorResponse,
+            "503": paymentErrorResponse,
+          },
+        },
+      },
     },
     components: {
       securitySchemes: {
@@ -191,6 +365,59 @@ export function openApiDocument() {
             },
           },
         },
+        Wallet: {
+          type: "object",
+          required: ["teamId", "displayName", "role", "availableBalance", "restrictedBalance"],
+          properties: {
+            teamId: { type: "integer" },
+            displayName: { type: "string" },
+            role: { type: "string" },
+            availableBalance: { type: "integer" },
+            restrictedBalance: { type: "integer" },
+          },
+        },
+        LedgerRow: {
+          type: "object",
+          required: ["id", "type", "amount", "availableBalanceAfter", "restrictedBalanceAfter", "createdAt"],
+          properties: {
+            id: { type: "integer" },
+            type: { type: "string" },
+            amount: { type: "integer" },
+            availableBalanceAfter: { type: "integer" },
+            restrictedBalanceAfter: { type: "integer" },
+            gatewayAttemptId: { type: "integer", nullable: true },
+            createdAt: { type: "string" },
+          },
+        },
+        Refund: {
+          type: "object",
+          required: ["id", "teamId", "transactionId", "amount", "status", "cardNumber", "createdAt"],
+          properties: {
+            id: { type: "integer" },
+            teamId: { type: "integer" },
+            transactionId: { type: "integer" },
+            amount: { type: "integer" },
+            status: { type: "string" },
+            cardNumber: { type: "string" },
+            createdAt: { type: "string" },
+          },
+        },
+        PaymentError: {
+          type: "object",
+          required: ["error"],
+          properties: {
+            error: {
+              type: "object",
+              required: ["type", "code", "message", "traceId"],
+              properties: {
+                type: { type: "string", enum: ["VALIDATION_ERROR", "DOMAIN_ERROR", "SYSTEM_ERROR"] },
+                code: { type: "string" },
+                message: { type: "string" },
+                traceId: { type: "string" },
+              },
+            },
+          },
+        },
       },
     },
   };
@@ -205,6 +432,10 @@ const okSchema = {
   properties: { ok: { type: "boolean", enum: [true] } },
 };
 const errorResponse = { description: "خطا", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } };
+const paymentErrorResponse = {
+  description: "خطای پرداخت",
+  content: { "application/json": { schema: { $ref: "#/components/schemas/PaymentError" } } },
+};
 
 /** Why: every auth call sends one JSON object. */
 function jsonBody(schema: object) {
