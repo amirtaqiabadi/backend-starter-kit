@@ -16,7 +16,7 @@ export async function recordAuthEvent(input: {
   phone: string;
   ip: string;
   userAgent: string;
-  userId?: string | null;
+  userId?: number | null;
 }): Promise<void> {
   try {
     await getPrisma().authEvent.create({
