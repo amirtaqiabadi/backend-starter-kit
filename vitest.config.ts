@@ -17,6 +17,7 @@ export default defineConfig({
       ZARINPAL_MERCHANT_ID: "11111111-1111-1111-1111-111111111111",
       ZARINPAL_SANDBOX: "true",
       PAYMENT_CALLBACK_HMAC_SECRET: "test-hmac-secret-must-be-32-chars-min",
+      PAYMENT_CARD_ENCRYPTION_KEY: "test-card-encryption-key-32-chars!",
       PAYMENT_CALLBACK_BASE_URL: "http://localhost:3000",
       PAYMENT_SUCCESS_REDIRECT_URL: "http://localhost:3000/docs?payment=ok",
       PAYMENT_FAILURE_REDIRECT_URL: "http://localhost:3000/docs?payment=failed",

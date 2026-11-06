@@ -204,7 +204,7 @@ model RefundRequest {
   initiatorId   String       @map("initiator_id")
   teamId        Int          @map("team_id")
   transactionId Int          @unique @map("transaction_id")
-  cardNumber    String       @map("card_number") @db.Char(16)
+  cardNumber    String       @map("card_number")
   amount        BigInt
   status        RefundStatus @default(pending)
   metadata      Json?        @map("metadata") @db.JsonB

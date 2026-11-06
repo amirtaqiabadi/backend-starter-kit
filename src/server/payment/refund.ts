@@ -2,6 +2,8 @@ import { Prisma } from "../../../generated/prisma/client";
 import { maskCardNumber, parseCardNumber } from "@/domain/payment/card";
 import { paymentMessages } from "@/domain/payment/messages";
 import { getPrisma } from "@/server/db";
+import { decryptCardNumber, encryptCardNumber } from "@/server/payment/card-crypto";
+import { paymentConfig } from "@/server/payment/config";
 import { jsonAmount } from "@/server/payment/metadata";
 import { paymentFail, type PaymentResult } from "@/server/payment/result";
 import { requireOwnerTeam } from "@/server/payment/wallets";
@@ -31,8 +33,24 @@ export async function createRefundRequest(input: {
       message: paymentMessages.cardInvalid,
     });
   }
-  const transaction = await getPrisma().transaction.findUnique({ where: { id: input.transactionId } });
+  const transaction = await getPrisma().transaction.findUnique({
+    where: { id: input.transactionId },
+    include: { gatewayAttempt: true },
+  });
   if (!transaction || transaction.type !== "GatewayCredit") {
+    return paymentFail({
+      status: 409,
+      type: "DOMAIN_ERROR",
+      code: "REFUND_NOT_ALLOWED",
+      message: paymentMessages.refundNotAllowed,
+    });
+  }
+  const reversed = transaction.gatewayAttemptId
+    ? await getPrisma().transaction.findFirst({
+        where: { gatewayAttemptId: transaction.gatewayAttemptId, type: "Reverse" },
+      })
+    : null;
+  if (reversed || transaction.gatewayAttempt?.status === "reversed" || transaction.gatewayAttempt?.status === "reverse_pending") {
     return paymentFail({
       status: 409,
       type: "DOMAIN_ERROR",
@@ -44,13 +62,21 @@ export async function createRefundRequest(input: {
   if (!owner.ok) {
     return owner;
   }
+  if (paymentConfig().cardEncryptionKey.length < 32) {
+    return paymentFail({
+      status: 503,
+      type: "SYSTEM_ERROR",
+      code: "GATEWAY_UNAVAILABLE",
+      message: paymentMessages.gatewayUnavailable,
+    });
+  }
   try {
     const created = await getPrisma().refundRequest.create({
       data: {
         initiatorId: input.userId,
         teamId: transaction.teamId,
         transactionId: transaction.id,
-        cardNumber,
+        cardNumber: encryptCardNumber(cardNumber),
         amount: transaction.amount,
         status: "pending",
       },
@@ -100,7 +126,15 @@ function toSummary(row: {
     transactionId: row.transactionId,
     amount: jsonAmount(row.amount),
     status: row.status,
-    cardNumber: maskCardNumber(row.cardNumber),
+    cardNumber: maskStoredCard(row.cardNumber),
     createdAt: row.createdAt.toISOString(),
   };
+}
+
+function maskStoredCard(stored: string): string {
+  const pan = decryptCardNumber(stored);
+  if (pan) {
+    return maskCardNumber(pan);
+  }
+  return "************";
 }

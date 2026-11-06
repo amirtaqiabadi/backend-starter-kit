@@ -169,6 +169,69 @@ describe("zarinpal wallet flow", () => {
     expect(body.recovered).toBe(1);
     expect(await getPrisma().transaction.count({ where: { gatewayAttemptId: initiated.attemptId } })).toBe(1);
   });
+
+  it("retries a reverse that timed out and rejects refunds after reverse", async () => {
+    const auth = await register("09120000027");
+    const started = await initiateRoute(
+      paymentPost("/api/payment/initiate", { amount: 4000, description: "شارژ" }, auth),
+    );
+    const initiated = (await started.json()) as { attemptId: number };
+    const attempt = await getPrisma().gatewayAttempt.findUniqueOrThrow({ where: { id: initiated.attemptId } });
+    await callbackRoute(callbackRequest("OK", attempt.id, attempt.amount, attempt.salt ?? "", AUTHORITY));
+
+    let reverseCalls = 0;
+    gateway = (url, body) => {
+      if (url.endsWith("reverse.json")) {
+        reverseCalls += 1;
+        if (reverseCalls === 1) {
+          throw new Error("timeout");
+        }
+        return { data: { code: 100, message: "Reversed" }, errors: [] };
+      }
+      return sandboxGateway()(url, body);
+    };
+    const pending = await reverseRoute(paymentPost("/api/payment/reverse", { attemptId: initiated.attemptId }, auth));
+    expect(pending.status).toBe(200);
+    expect((await getPrisma().gatewayAttempt.findUniqueOrThrow({ where: { id: initiated.attemptId } })).status).toBe(
+      "reverse_pending",
+    );
+
+    const retried = await reverseRoute(paymentPost("/api/payment/reverse", { attemptId: initiated.attemptId }, auth));
+    expect(retried.status).toBe(200);
+    expect((await getPrisma().gatewayAttempt.findUniqueOrThrow({ where: { id: initiated.attemptId } })).status).toBe(
+      "reversed",
+    );
+
+    const credit = await getPrisma().transaction.findFirstOrThrow({
+      where: { gatewayAttemptId: initiated.attemptId, type: "GatewayCredit" },
+    });
+    const refunded = await createRefundRoute(
+      paymentPost("/api/payment/refunds", { transactionId: credit.id, cardNumber: "5022291234565995" }, auth),
+    );
+    expect(refunded.status).toBe(409);
+  });
+
+  it("stores an encrypted refund PAN, not the 16 digits", async () => {
+    const auth = await register("09120000028");
+    const started = await initiateRoute(
+      paymentPost("/api/payment/initiate", { amount: 1000, description: "شارژ" }, auth),
+    );
+    const initiated = (await started.json()) as { attemptId: number };
+    const attempt = await getPrisma().gatewayAttempt.findUniqueOrThrow({ where: { id: initiated.attemptId } });
+    await callbackRoute(callbackRequest("OK", attempt.id, attempt.amount, attempt.salt ?? "", AUTHORITY));
+    const credit = await getPrisma().transaction.findFirstOrThrow({
+      where: { gatewayAttemptId: initiated.attemptId, type: "GatewayCredit" },
+    });
+    const refunded = await createRefundRoute(
+      paymentPost("/api/payment/refunds", { transactionId: credit.id, cardNumber: "5022291234565995" }, auth),
+    );
+    expect(refunded.status).toBe(201);
+    const stored = await getPrisma().refundRequest.findFirstOrThrow({ where: { transactionId: credit.id } });
+    expect(stored.cardNumber).not.toBe("5022291234565995");
+    expect(stored.cardNumber.startsWith("enc:v1:")).toBe(true);
+    const listed = (await refunded.json()) as { cardNumber: string };
+    expect(listed.cardNumber).toBe("502229******5995");
+  });
 });
 
 function sandboxGateway(overrides: { reverse?: unknown } = {}): GatewayHandler {

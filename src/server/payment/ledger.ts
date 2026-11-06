@@ -83,17 +83,23 @@ export async function applyVerifyResult(input: {
         metadata: mergeMetadata(attempt.metadata, { verifyCode: input.verify.code }),
       },
     });
-    await tx.transaction.create({
-      data: {
-        initiatorId: attempt.initiator_id,
-        teamId: attempt.team_id,
-        gatewayAttemptId: attempt.id,
-        type: "GatewayCredit",
-        amount: creditAmount,
-        availableBalanceAfter: previous.available + creditAmount,
-        restrictedBalanceAfter: previous.restricted,
-      },
-    });
+    try {
+      await tx.transaction.create({
+        data: {
+          initiatorId: attempt.initiator_id,
+          teamId: attempt.team_id,
+          gatewayAttemptId: attempt.id,
+          type: "GatewayCredit",
+          amount: creditAmount,
+          availableBalanceAfter: previous.available + creditAmount,
+          restrictedBalanceAfter: previous.restricted,
+        },
+      });
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) {
+        throw error;
+      }
+    }
     return { ok: true as const, data: { attemptId: attempt.id } };
   });
 }
@@ -141,6 +147,7 @@ export async function lockLatestBalance(
   tx: Prisma.TransactionClient,
   teamId: number,
 ): Promise<LockedBalance> {
+  await tx.$queryRaw`SELECT id FROM teams WHERE id = ${teamId} FOR UPDATE`;
   const rows = await tx.$queryRaw<
     Array<{ available_balance_after: bigint; restricted_balance_after: bigint }>
   >`
@@ -149,7 +156,6 @@ export async function lockLatestBalance(
     WHERE team_id = ${teamId}
     ORDER BY created_at DESC, id DESC
     LIMIT 1
-    FOR UPDATE
   `;
   const row = rows[0];
   if (!row) {

@@ -2,6 +2,7 @@ export type PaymentConfig = {
   merchantId: string;
   sandbox: boolean;
   hmacSecret: string;
+  cardEncryptionKey: string;
   callbackBaseUrl: string;
   successRedirectUrl: string;
   failureRedirectUrl: string;
@@ -24,10 +25,12 @@ export function paymentConfig(env: NodeJS.ProcessEnv = process.env): PaymentConf
   const sandbox = sandboxRaw !== "false";
   const merchantId = env.ZARINPAL_MERCHANT_ID?.trim() ?? "";
   const hmacSecret = env.PAYMENT_CALLBACK_HMAC_SECRET ?? "";
+  const cardEncryptionKey = env.PAYMENT_CARD_ENCRYPTION_KEY ?? "";
   const callbackBaseUrl = trimSlash(env.PAYMENT_CALLBACK_BASE_URL ?? "");
   if (production) {
     requireValue("ZARINPAL_MERCHANT_ID", merchantId);
-    requireHmac(hmacSecret);
+    requireSecret("PAYMENT_CALLBACK_HMAC_SECRET", hmacSecret);
+    requireSecret("PAYMENT_CARD_ENCRYPTION_KEY", cardEncryptionKey);
     requireValue("PAYMENT_CALLBACK_BASE_URL", callbackBaseUrl);
   }
   const base = callbackBaseUrl || "http://localhost:3000";
@@ -35,6 +38,7 @@ export function paymentConfig(env: NodeJS.ProcessEnv = process.env): PaymentConf
     merchantId,
     sandbox,
     hmacSecret,
+    cardEncryptionKey,
     callbackBaseUrl: base,
     successRedirectUrl: env.PAYMENT_SUCCESS_REDIRECT_URL?.trim() || `${base}/docs?payment=ok`,
     failureRedirectUrl: env.PAYMENT_FAILURE_REDIRECT_URL?.trim() || `${base}/docs?payment=failed`,
@@ -59,9 +63,9 @@ function requireValue(name: string, value: string): void {
   }
 }
 
-function requireHmac(secret: string): void {
+function requireSecret(name: string, secret: string): void {
   if (secret.length < 32) {
-    throw new Error("PAYMENT_CALLBACK_HMAC_SECRET must be at least 32 characters");
+    throw new Error(`${name} must be at least 32 characters`);
   }
 }
 

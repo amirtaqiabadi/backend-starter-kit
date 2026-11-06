@@ -1,3 +1,4 @@
+import { Prisma } from "../../../generated/prisma/client";
 import { paymentMessages } from "@/domain/payment/messages";
 import { isWithinReverseWindow, REVERSE_SUCCESS } from "@/domain/payment/status";
 import { getPrisma } from "@/server/db";
@@ -6,6 +7,9 @@ import { mergeMetadata } from "@/server/payment/metadata";
 import { paymentFail, type PaymentResult } from "@/server/payment/result";
 import { requireOwnerTeam } from "@/server/payment/wallets";
 import { reversePayment } from "@/server/payment/zarinpal";
+
+type ReverseTx = Prisma.TransactionClient;
+type ReverseLocked = { id: number; metadata: Prisma.JsonValue | null };
 
 /** Why: reverse appends a negative ledger row and never deletes the original credit. */
 export async function reverseAttempt(input: {
@@ -25,35 +29,7 @@ export async function reverseAttempt(input: {
   if (!owner.ok) {
     return owner;
   }
-  const credit = await getPrisma().transaction.findFirst({
-    where: { gatewayAttemptId: attempt.id, type: "GatewayCredit" },
-  });
-  if (
-    !credit ||
-    attempt.transactionType !== "gateway_credit" ||
-    attempt.status !== "successful" ||
-    !attempt.referenceId ||
-    !attempt.sessionToken
-  ) {
-    return paymentFail({
-      status: 409,
-      type: "DOMAIN_ERROR",
-      code: "REVERSE_NOT_ALLOWED",
-      message: paymentMessages.reverseNotAllowed,
-    });
-  }
-  if (!isWithinReverseWindow(credit.createdAt)) {
-    return paymentFail({
-      status: 409,
-      type: "DOMAIN_ERROR",
-      code: "REVERSE_WINDOW_EXPIRED",
-      message: paymentMessages.reverseWindowExpired,
-    });
-  }
-  const existingReverse = await getPrisma().transaction.findFirst({
-    where: { gatewayAttemptId: attempt.id, type: "Reverse" },
-  });
-  if (existingReverse) {
+  if (attempt.status === "reversed") {
     return paymentFail({
       status: 409,
       type: "DOMAIN_ERROR",
@@ -61,17 +37,59 @@ export async function reverseAttempt(input: {
       message: paymentMessages.alreadyReversed,
     });
   }
+  const retrying = attempt.status === "reverse_pending";
+  const credit = await getPrisma().transaction.findFirst({
+    where: { gatewayAttemptId: attempt.id, type: "GatewayCredit" },
+  });
+  if (!credit || attempt.transactionType !== "gateway_credit" || !attempt.referenceId || !attempt.sessionToken) {
+    return paymentFail({
+      status: 409,
+      type: "DOMAIN_ERROR",
+      code: "REVERSE_NOT_ALLOWED",
+      message: paymentMessages.reverseNotAllowed,
+    });
+  }
+  if (!retrying && attempt.status !== "successful") {
+    return paymentFail({
+      status: 409,
+      type: "DOMAIN_ERROR",
+      code: "REVERSE_NOT_ALLOWED",
+      message: paymentMessages.reverseNotAllowed,
+    });
+  }
+  if (!retrying && !isWithinReverseWindow(credit.createdAt)) {
+    return paymentFail({
+      status: 409,
+      type: "DOMAIN_ERROR",
+      code: "REVERSE_WINDOW_EXPIRED",
+      message: paymentMessages.reverseWindowExpired,
+    });
+  }
   try {
     return await getPrisma().$transaction(async (tx) => {
       const locked = await lockAttemptById(tx, attempt.id);
-      if (!locked || locked.status !== "50-successful") {
+      if (!locked) {
         throw reverseAbort("REVERSE_NOT_ALLOWED", paymentMessages.reverseNotAllowed);
+      }
+      if (locked.status === "90-reversed") {
+        throw reverseAbort("ALREADY_REVERSED", paymentMessages.alreadyReversed);
       }
       const reverseRow = await tx.transaction.findFirst({
         where: { gatewayAttemptId: attempt.id, type: "Reverse" },
       });
-      if (reverseRow) {
-        throw reverseAbort("ALREADY_REVERSED", paymentMessages.alreadyReversed);
+      if (locked.status === "70-reverse_pending") {
+        return finishGatewayReverse({
+          tx,
+          locked,
+          authority: attempt.sessionToken ?? "",
+          alreadyDeducted: true,
+        });
+      }
+      if (locked.status !== "50-successful" || reverseRow) {
+        throw reverseAbort(
+          reverseRow ? "ALREADY_REVERSED" : "REVERSE_NOT_ALLOWED",
+          reverseRow ? paymentMessages.alreadyReversed : paymentMessages.reverseNotAllowed,
+        );
       }
       const previous = await lockLatestBalance(tx, locked.team_id);
       if (previous.available < locked.amount) {
@@ -88,37 +106,59 @@ export async function reverseAttempt(input: {
           restrictedBalanceAfter: previous.restricted,
         },
       });
-      const reversed = await reversePayment(attempt.sessionToken ?? "");
-      if (!reversed.ok && reversed.kind === "unavailable") {
-        await tx.gatewayAttempt.update({
-          where: { id: locked.id },
-          data: {
-            status: "reverse_pending",
-            metadata: mergeMetadata(locked.metadata, { reverseNote: "gateway_timeout" }),
-          },
-        });
-        return { ok: true as const, data: { attemptId: locked.id } };
-      }
-      if (!reversed.ok || reversed.code !== REVERSE_SUCCESS) {
-        throw reverseAbort("GATEWAY_REJECTED", paymentMessages.gatewayRejected);
-      }
-      await tx.gatewayAttempt.update({
-        where: { id: locked.id },
-        data: {
-          status: "reversed",
-          metadata: mergeMetadata(locked.metadata, { reverseCode: reversed.code }),
-        },
+      return finishGatewayReverse({
+        tx,
+        locked,
+        authority: attempt.sessionToken ?? "",
+        alreadyDeducted: false,
       });
-      return { ok: true as const, data: { attemptId: locked.id } };
     }, { timeout: 20_000 });
   } catch (error) {
     if (error instanceof ReverseAbort) {
-      const status = error.code === "GATEWAY_REJECTED" ? 502 : error.code === "INSUFFICIENT_BALANCE" ? 409 : 409;
+      const status = error.code === "GATEWAY_REJECTED" ? 502 : 409;
       const type = error.code === "GATEWAY_REJECTED" ? "SYSTEM_ERROR" : "DOMAIN_ERROR";
       return paymentFail({ status, type, code: error.code, message: error.message });
     }
     throw error;
   }
+}
+
+async function finishGatewayReverse(input: {
+  tx: ReverseTx;
+  locked: ReverseLocked;
+  authority: string;
+  alreadyDeducted: boolean;
+}): Promise<{ ok: true; data: { attemptId: number } }> {
+  const reversed = await reversePayment(input.authority);
+  if (!reversed.ok && reversed.kind === "unavailable") {
+    await input.tx.gatewayAttempt.update({
+      where: { id: input.locked.id },
+      data: {
+        status: "reverse_pending",
+        metadata: mergeMetadata(input.locked.metadata, { reverseNote: "gateway_timeout" }),
+      },
+    });
+    return { ok: true, data: { attemptId: input.locked.id } };
+  }
+  if (reversed.ok && reversed.code === REVERSE_SUCCESS) {
+    await markReversed(input.tx, input.locked, reversed.code);
+    return { ok: true, data: { attemptId: input.locked.id } };
+  }
+  if (input.alreadyDeducted && reversed.code === -61) {
+    await markReversed(input.tx, input.locked, reversed.code);
+    return { ok: true, data: { attemptId: input.locked.id } };
+  }
+  throw reverseAbort("GATEWAY_REJECTED", paymentMessages.gatewayRejected);
+}
+
+async function markReversed(tx: ReverseTx, locked: ReverseLocked, reverseCode: number | undefined): Promise<void> {
+  await tx.gatewayAttempt.update({
+    where: { id: locked.id },
+    data: {
+      status: "reversed",
+      metadata: mergeMetadata(locked.metadata, { reverseCode: reverseCode ?? null }),
+    },
+  });
 }
 
 class ReverseAbort extends Error {
