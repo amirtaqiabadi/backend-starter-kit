@@ -4,7 +4,7 @@ import { getRedis } from "@/server/redis";
 
 export type SessionRecord = {
   sessionId: string;
-  userId: string;
+  userId: number;
   createdAt: number;
   ip: string;
   userAgent: string;
@@ -27,7 +27,7 @@ return 1
 
 /** Why: each login gets a fresh 256-bit id so an old cookie cannot be reused as the new session. */
 export async function createSession(input: {
-  userId: string;
+  userId: number;
   ip: string;
   userAgent: string;
 }): Promise<string> {
@@ -50,7 +50,7 @@ export async function createSession(input: {
   return sessionId;
 }
 
-/** Why: activity extends the session only until the absolute lifetime is reached. */
+/** Why: activity extends the session only until the absolute lifetime, and a non-numeric user id is a retired session. */
 export async function readSession(sessionId: string | null): Promise<SessionRecord | null> {
   if (!sessionId) {
     return null;
@@ -60,6 +60,10 @@ export async function readSession(sessionId: string | null): Promise<SessionReco
     return null;
   }
   const stored = JSON.parse(raw) as StoredSession;
+  if (typeof stored.userId !== "number") {
+    await getRedis().del(sessionKey(sessionId));
+    return null;
+  }
   const ageSeconds = Math.floor((Date.now() - stored.createdAt) / 1000);
   const remaining = authConfig().sessionAbsoluteSeconds - ageSeconds;
   if (remaining <= 0) {
@@ -73,7 +77,7 @@ export async function readSession(sessionId: string | null): Promise<SessionReco
 
 /** Why: a password reset must keep the caller signed in and drop every other device. */
 export async function invalidateOtherSessions(input: {
-  userId: string;
+  userId: number;
   sessionId: string;
 }): Promise<void> {
   await getRedis().eval(INVALIDATE_OTHERS, 1, userSessionsKey(input.userId), input.sessionId);
@@ -91,7 +95,7 @@ export async function consumePasswordReset(sessionId: string): Promise<boolean> 
 }
 
 /** Why: an expired absolute session should not linger in the user's session set. */
-async function destroySession(input: { sessionId: string; userId: string }): Promise<void> {
+async function destroySession(input: { sessionId: string; userId: number }): Promise<void> {
   const redis = getRedis();
   await redis.del(sessionKey(input.sessionId), resetKey(input.sessionId));
   await redis.srem(userSessionsKey(input.userId), input.sessionId);
@@ -103,7 +107,7 @@ function sessionKey(sessionId: string): string {
 }
 
 /** Why: bulk invalidation needs the set of ids that belong to one user. */
-function userSessionsKey(userId: string): string {
+function userSessionsKey(userId: number): string {
   return `user:sessions:${userId}`;
 }
 

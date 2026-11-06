@@ -8,8 +8,9 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(cuid())
+  id            Int       @id @default(autoincrement())
   phoneNumber   String    @unique @map("phone_number")
+  name          String?
   passwordHash  String?   @map("password_hash")
   passwordSetAt DateTime? @map("password_set_at")
   lastLoginAt   DateTime? @map("last_login_at")
@@ -21,7 +22,7 @@ model User {
 
 model AuthEvent {
   id          String   @id @default(cuid())
-  userId      String?  @map("user_id")
+  userId      Int?     @map("user_id")
   phoneMasked String   @map("phone_masked")
   type        String
   ip          String
