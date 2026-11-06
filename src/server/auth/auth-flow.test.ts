@@ -9,6 +9,7 @@ import { getPrisma } from "@/server/db";
 import { getRedis } from "@/server/redis";
 import { setSmsService, type SmsService } from "@/server/sms";
 import { findOrCreateUserByPhone } from "@/server/auth/users";
+import { deleteAllPaymentRows } from "@/server/payment/clear-tables";
 
 const ORIGIN = "http://localhost:3000";
 
@@ -64,6 +65,7 @@ describe("phone auth flow", () => {
     sms.fail = false;
     setSmsService(sms);
     await getRedis().flushdb();
+    await deleteAllPaymentRows();
     await getPrisma().authEvent.deleteMany();
     await getPrisma().user.deleteMany();
   });
