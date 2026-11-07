@@ -90,7 +90,6 @@ export function readCookie(request: Request, name: string): string | null {
 /** Why: the caller can prepend X-Forwarded-For, so only hops added by a configured proxy count. */
 export function resolveClientIp(input: {
   forwardedFor: string | null;
-  realIp: string | null;
   trustedProxyCount?: number;
   fallback?: string;
 }): string {
@@ -100,11 +99,10 @@ export function resolveClientIp(input: {
     return fallback;
   }
   const hops = forwardedHops(input.forwardedFor);
-  if (hops.length >= trustedHops) {
-    return hops[hops.length - trustedHops] ?? fallback;
+  if (hops.length < trustedHops) {
+    return fallback;
   }
-  const realIp = input.realIp?.trim() ?? "";
-  return realIp || fallback;
+  return hops[hops.length - trustedHops] ?? fallback;
 }
 
 /** Why: production must mark cookies Secure even when TLS stops at a proxy in front of this process. */
@@ -119,7 +117,6 @@ export function secureCookie(request: Request, nodeEnv = process.env.NODE_ENV ??
 function clientIp(request: Request, fallback: string): string {
   return resolveClientIp({
     forwardedFor: request.headers.get("x-forwarded-for"),
-    realIp: request.headers.get("x-real-ip"),
     trustedProxyCount: trustedProxyCount(),
     fallback,
   });

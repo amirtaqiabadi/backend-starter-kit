@@ -6,7 +6,6 @@ describe("resolveClientIp", () => {
     expect(
       resolveClientIp({
         forwardedFor: "203.0.113.5",
-        realIp: "203.0.113.9",
         trustedProxyCount: 0,
         fallback: "unknown",
       }),
@@ -17,11 +16,20 @@ describe("resolveClientIp", () => {
     expect(
       resolveClientIp({
         forwardedFor: "198.51.100.9, 203.0.113.5",
-        realIp: null,
         trustedProxyCount: 1,
         fallback: "unknown",
       }),
     ).toBe("203.0.113.5");
+  });
+
+  it("keeps the fallback when the forwarded chain is shorter than the trusted hop count", () => {
+    expect(
+      resolveClientIp({
+        forwardedFor: null,
+        trustedProxyCount: 1,
+        fallback: "unknown",
+      }),
+    ).toBe("unknown");
   });
 });
 

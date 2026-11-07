@@ -77,6 +77,9 @@ export async function reverseAttempt(input: {
       const reverseRow = await tx.transaction.findFirst({
         where: { gatewayAttemptId: attempt.id, type: "Reverse" },
       });
+      if (await hasOpenRefund(tx, locked.id)) {
+        throw reverseAbort("REVERSE_NOT_ALLOWED", paymentMessages.reverseNotAllowed);
+      }
       if (locked.status === "70-reverse_pending") {
         return finishGatewayReverse({
           tx,
@@ -90,9 +93,6 @@ export async function reverseAttempt(input: {
           reverseRow ? "ALREADY_REVERSED" : "REVERSE_NOT_ALLOWED",
           reverseRow ? paymentMessages.alreadyReversed : paymentMessages.reverseNotAllowed,
         );
-      }
-      if (await hasOpenRefund(tx, locked.id)) {
-        throw reverseAbort("REVERSE_NOT_ALLOWED", paymentMessages.reverseNotAllowed);
       }
       const previous = await lockLatestBalance(tx, locked.team_id);
       if (previous.available < locked.amount) {

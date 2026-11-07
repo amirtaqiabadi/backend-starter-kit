@@ -220,6 +220,44 @@ describe("zarinpal wallet flow", () => {
     expect(refunded.status).toBe(409);
   });
 
+  it("does not finish a pending reverse while a card refund is still open", async () => {
+    const auth = await register("09120000029");
+    const started = await initiateRoute(
+      paymentPost("/api/payment/initiate", { amount: 4000, description: "شارژ" }, auth),
+    );
+    const initiated = (await started.json()) as { attemptId: number };
+    const attempt = await getPrisma().gatewayAttempt.findUniqueOrThrow({ where: { id: initiated.attemptId } });
+    await callbackRoute(callbackRequest("OK", attempt.id, attempt.amount, attempt.salt ?? "", AUTHORITY));
+    gateway = (url, body) => {
+      if (url.endsWith("reverse.json")) {
+        throw new Error("timeout");
+      }
+      return sandboxGateway()(url, body);
+    };
+    const pending = await reverseRoute(paymentPost("/api/payment/reverse", { attemptId: initiated.attemptId }, auth));
+    expect(pending.status).toBe(200);
+    const credit = await getPrisma().transaction.findFirstOrThrow({
+      where: { gatewayAttemptId: initiated.attemptId, type: "GatewayCredit" },
+    });
+    await getPrisma().refundRequest.create({
+      data: {
+        initiatorId: attempt.initiatorId,
+        teamId: attempt.teamId,
+        transactionId: credit.id,
+        cardNumber: "enc:v1:legacy",
+        amount: credit.amount,
+        status: "pending",
+      },
+    });
+    gatewayCalls.length = 0;
+    const retried = await reverseRoute(paymentPost("/api/payment/reverse", { attemptId: initiated.attemptId }, auth));
+    expect(retried.status).toBe(409);
+    expect(gatewayCalls.some((url) => url.endsWith("reverse.json"))).toBe(false);
+    expect((await getPrisma().gatewayAttempt.findUniqueOrThrow({ where: { id: initiated.attemptId } })).status).toBe(
+      "reverse_pending",
+    );
+  });
+
   it("stores an encrypted refund PAN, not the 16 digits", async () => {
     const auth = await register("09120000028");
     const started = await initiateRoute(
