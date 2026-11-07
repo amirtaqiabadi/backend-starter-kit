@@ -50,7 +50,7 @@ export async function createRefundRequest(input: {
         where: { gatewayAttemptId: transaction.gatewayAttemptId, type: "Reverse" },
       })
     : null;
-  if (reversed || transaction.gatewayAttempt?.status === "reversed" || transaction.gatewayAttempt?.status === "reverse_pending") {
+  if (refundBlocked({ reverseExists: reversed !== null, status: transaction.gatewayAttempt?.status })) {
     return paymentFail({
       status: 409,
       type: "DOMAIN_ERROR",
@@ -71,18 +71,24 @@ export async function createRefundRequest(input: {
     });
   }
   try {
-    const created = await getPrisma().refundRequest.create({
-      data: {
-        initiatorId: input.userId,
-        teamId: transaction.teamId,
-        transactionId: transaction.id,
-        cardNumber: encryptCardNumber(cardNumber),
-        amount: transaction.amount,
-        status: "pending",
-      },
+    const created = await insertPendingRefund({
+      userId: input.userId,
+      teamId: transaction.teamId,
+      transactionId: transaction.id,
+      gatewayAttemptId: transaction.gatewayAttemptId,
+      amount: transaction.amount,
+      cardNumber: encryptCardNumber(cardNumber),
     });
     return { ok: true, data: toSummary(created) };
   } catch (error) {
+    if (error instanceof RefundRejected) {
+      return paymentFail({
+        status: 409,
+        type: "DOMAIN_ERROR",
+        code: error.reason,
+        message: error.reason === "REFUND_EXISTS" ? paymentMessages.refundExists : paymentMessages.refundNotAllowed,
+      });
+    }
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return paymentFail({
         status: 409,
@@ -92,6 +98,53 @@ export async function createRefundRequest(input: {
       });
     }
     throw error;
+  }
+}
+
+/** Why: the attempt row must stay locked until the refund insert commits, or reverse can start in between. */
+async function insertPendingRefund(input: {
+  userId: string;
+  teamId: number;
+  transactionId: number;
+  gatewayAttemptId: number | null;
+  amount: bigint;
+  cardNumber: string;
+}) {
+  return getPrisma().$transaction(async (tx) => {
+    if (input.gatewayAttemptId !== null) {
+      await tx.$queryRaw`SELECT id FROM gateway_attempts WHERE id = ${input.gatewayAttemptId} FOR UPDATE`;
+      const attempt = await tx.gatewayAttempt.findUnique({ where: { id: input.gatewayAttemptId } });
+      const reverse = await tx.transaction.findFirst({
+        where: { gatewayAttemptId: input.gatewayAttemptId, type: "Reverse" },
+      });
+      if (refundBlocked({ reverseExists: reverse !== null, status: attempt?.status })) {
+        throw new RefundRejected("REFUND_NOT_ALLOWED");
+      }
+    }
+    return tx.refundRequest.create({
+      data: {
+        initiatorId: input.userId,
+        teamId: input.teamId,
+        transactionId: input.transactionId,
+        cardNumber: input.cardNumber,
+        amount: input.amount,
+        status: "pending",
+      },
+    });
+  });
+}
+
+/** Why: reverse and a manual card refund are two payouts of one credit. */
+function refundBlocked(input: { reverseExists: boolean; status: string | undefined }): boolean {
+  return input.reverseExists || input.status === "reversed" || input.status === "reverse_pending";
+}
+
+class RefundRejected extends Error {
+  readonly reason: "REFUND_NOT_ALLOWED" | "REFUND_EXISTS";
+
+  constructor(reason: "REFUND_NOT_ALLOWED" | "REFUND_EXISTS") {
+    super(reason);
+    this.reason = reason;
   }
 }
 

@@ -246,7 +246,7 @@ export function openApiDocument() {
       "/api/payment/reverse": {
         post: {
           tags: ["payment"],
-          summary: "برگشت درگاه تا ۳۰ دقیقه",
+          summary: "برگشت درگاه تا ۳۰ دقیقه، مگر اینکه استرداد کارت باز باشد",
           security: [{ sessionCookie: [] }],
           requestBody: jsonBody({
             required: ["attemptId"],
@@ -284,7 +284,7 @@ export function openApiDocument() {
         },
         post: {
           tags: ["payment"],
-          summary: "ثبت درخواست استرداد دستی به کارت",
+          summary: "ثبت درخواست استرداد دستی به کارت، مگر اینکه برگشت درگاه شروع شده باشد",
           security: [{ sessionCookie: [] }],
           requestBody: jsonBody({
             required: ["transactionId", "cardNumber"],
