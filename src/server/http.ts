@@ -46,6 +46,27 @@ export function readString(body: Record<string, unknown>, key: string, fallback 
   return typeof value === "string" ? value : fallback;
 }
 
+/** Why: integer JSON fields must stay whole numbers and not be parsed from strings with junk. */
+export function readInteger(body: Record<string, unknown>, key: string): number | null {
+  const value = body[key];
+  if (typeof value === "number" && Number.isInteger(value)) {
+    return value;
+  }
+  if (typeof value === "string" && /^-?\d+$/.test(value)) {
+    return Number(value);
+  }
+  return null;
+}
+
+/** Why: payment errors need a stable id even when the client omitted x-request-id. */
+export function requestTraceId(request: Request): string {
+  const header = request.headers.get("x-request-id")?.trim();
+  if (header) {
+    return header.slice(0, 128);
+  }
+  return crypto.randomUUID();
+}
+
 /** Why: the cookie jar is read without a framework helper so tests can use a plain Request. */
 export function readCookie(request: Request, name: string): string | null {
   const header = request.headers.get("cookie");
@@ -66,17 +87,59 @@ export function readCookie(request: Request, name: string): string | null {
   return null;
 }
 
-/** Why: the first forwarded hop is the client when a proxy is present. */
-function clientIp(request: Request, fallback: string): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) {
-    const first = forwarded.split(",")[0]?.trim();
-    if (first) {
-      return first;
-    }
+/** Why: the caller can prepend X-Forwarded-For, so only hops added by a configured proxy count. */
+export function resolveClientIp(input: {
+  forwardedFor: string | null;
+  trustedProxyCount?: number;
+  fallback?: string;
+}): string {
+  const trustedHops = input.trustedProxyCount ?? 0;
+  const fallback = input.fallback ?? "unknown";
+  if (trustedHops <= 0) {
+    return fallback;
   }
-  const realIp = request.headers.get("x-real-ip")?.trim();
-  return realIp || fallback;
+  const hops = forwardedHops(input.forwardedFor);
+  if (hops.length < trustedHops) {
+    return fallback;
+  }
+  return hops[hops.length - trustedHops] ?? fallback;
+}
+
+/** Why: production must mark cookies Secure even when TLS stops at a proxy in front of this process. */
+export function secureCookie(request: Request, nodeEnv = process.env.NODE_ENV ?? "development"): boolean {
+  if (nodeEnv === "production") {
+    return true;
+  }
+  return new URL(request.url).protocol === "https:";
+}
+
+/** Why: rate-limit keys read one resolved address instead of raw proxy headers. */
+function clientIp(request: Request, fallback: string): string {
+  return resolveClientIp({
+    forwardedFor: request.headers.get("x-forwarded-for"),
+    trustedProxyCount: trustedProxyCount(),
+    fallback,
+  });
+}
+
+/** Why: zero means the process is reached directly and every forwarded header is caller-controlled. */
+function trustedProxyCount(env: NodeJS.ProcessEnv = process.env): number {
+  const parsed = Number(env.TRUSTED_PROXY_COUNT);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    return 0;
+  }
+  return parsed;
+}
+
+/** Why: proxies append addresses, so empty slots from a trailing comma must not become an identity. */
+function forwardedHops(header: string | null): string[] {
+  if (!header) {
+    return [];
+  }
+  return header
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
 }
 
 /** Why: some runtimes omit the Host header and only expose it on the request URL. */

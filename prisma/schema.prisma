@@ -17,6 +17,11 @@ model User {
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
+  teamMemberships TeamMember[]
+  gatewayAttempts GatewayAttempt[] @relation("GatewayAttemptInitiator")
+  transactions    Transaction[]    @relation("TransactionInitiator")
+  refundRequests  RefundRequest[]
+
   @@map("users")
 }
 
@@ -30,4 +35,189 @@ model AuthEvent {
   createdAt   DateTime @default(now()) @map("created_at")
 
   @@map("auth_events")
+}
+
+enum MemberRole {
+  owner  @map("owner")
+  admin  @map("admin")
+  member @map("member")
+  viewer @map("viewer")
+}
+
+enum TeamMemberStatus {
+  pendingOwnerApproval @map("pending_owner_approval")
+  active               @map("active")
+  revoked              @map("revoked")
+  left                 @map("left")
+}
+
+enum TransactionType {
+  Deposit                @map("deposit")
+  BonusDeposit           @map("bonus_deposit")
+  GiftCardCredit         @map("gift_card_credit")
+  GiftCredit             @map("gift_credit")
+  DirectBankDeposit      @map("direct_bank_deposit")
+  WalletTransferIn       @map("wallet_transfer_in")
+  GatewayCredit          @map("gateway_credit")
+  AnonymousGatewayCredit @map("anonymous_gateway_credit")
+  ServiceCredit          @map("service_credit")
+  RefundCancellation     @map("refund_cancellation")
+  ServiceCancelCredit    @map("service_cancel_credit")
+  Refund                 @map("refund")
+  BonusExpiration        @map("bonus_expiration")
+  ServiceDebit           @map("service_debit")
+  AccommodationRenewal   @map("accommodation_renewal")
+  UserVerification       @map("user_verification")
+  Reverse                @map("reverse")
+}
+
+enum GatewayType {
+  zarinpal @map("zarinpal")
+  zibal    @map("zibal")
+  sep      @map("sep")
+}
+
+enum GatewayAttemptStatus {
+  pending         @map("10-pending")
+  successful      @map("50-successful")
+  reverse_pending @map("70-reverse_pending")
+  failed          @map("80-failed")
+  reversed        @map("90-reversed")
+}
+
+enum RefundStatus {
+  pending    @map("10-pending")
+  processing @map("30-processing")
+  paid       @map("50-paid")
+  rejected   @map("80-rejected")
+  failed     @map("90-failed")
+}
+
+model Team {
+  id        Int      @id @default(autoincrement())
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  members         TeamMember[]
+  transactions    Transaction[]
+  gatewayAttempts GatewayAttempt[]
+  refundRequests  RefundRequest[]
+
+  @@index([updatedAt])
+  @@map("teams")
+}
+
+model TeamMember {
+  id          Int              @id @default(autoincrement())
+  teamId      Int              @map("team_id")
+  userId      String           @map("user_id")
+  displayName String?          @map("display_name")
+  role        MemberRole       @default(member) @map("role")
+  isActive    Boolean          @default(true) @map("is_active")
+  status      TeamMemberStatus @default(active) @map("status")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @default(now()) @updatedAt @map("updated_at")
+
+  team Team @relation(fields: [teamId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([teamId, userId])
+  @@index([teamId])
+  @@index([userId])
+  @@index([status])
+  @@map("team_members")
+}
+
+model GatewayAttempt {
+  id                     Int                  @id @default(autoincrement())
+  merchantCorrelationKey String               @unique @map("merchant_correlation_key") @db.VarChar(64)
+  initiatorId            String               @map("initiator_id")
+  teamId                 Int                  @map("team_id")
+  accommodationId        Int?                 @map("accommodation_id")
+  type                   GatewayType          @map("type")
+  transactionType        String               @default("gateway_credit") @map("transaction_type") @db.VarChar(64)
+  status                 GatewayAttemptStatus @default(pending) @map("status")
+  callbackUrl            String?              @map("callback_url")
+  sessionToken           String?              @map("session_token")
+  referenceId            String?              @map("reference_id")
+  trackingNumber         String?              @map("tracking_number")
+  maskedPan              String?              @map("masked_pan")
+  hashedPan              String?              @map("hashed_pan")
+  salt                   String?              @map("salt")
+  amount                 BigInt               @map("amount")
+  fee                    BigInt               @map("fee")
+  metadata               Json?                @map("metadata") @db.JsonB
+  notes                  String?              @map("notes")
+  createdAt              DateTime             @default(now()) @map("created_at")
+  updatedAt              DateTime             @default(now()) @updatedAt @map("updated_at")
+
+  initiator    User          @relation("GatewayAttemptInitiator", fields: [initiatorId], references: [id])
+  team         Team          @relation(fields: [teamId], references: [id])
+  transactions Transaction[]
+
+  @@index([type])
+  @@index([transactionType])
+  @@index([status])
+  @@index([referenceId])
+  @@index([createdAt])
+  @@index([updatedAt])
+  @@index([initiatorId, teamId, status])
+  @@index([accommodationId])
+  @@map("gateway_attempts")
+}
+
+model Transaction {
+  id                     Int             @id @default(autoincrement())
+  initiatorId            String          @map("initiator_id")
+  teamId                 Int             @map("team_id")
+  gatewayAttemptId       Int?            @map("gateway_attempt_id")
+  accommodationId        Int?            @map("accommodation_id")
+  bookingId              Int?            @map("booking_id")
+  type                   TransactionType @map("type")
+  amount                 BigInt          @map("amount")
+  availableBalanceAfter  BigInt          @map("available_balance_after")
+  restrictedBalanceAfter BigInt          @map("restricted_balance_after")
+  metadata               Json?           @map("metadata") @db.JsonB
+  createdAt              DateTime        @default(now()) @map("created_at")
+  updatedAt              DateTime        @default(now()) @updatedAt @map("updated_at")
+
+  initiator      User            @relation("TransactionInitiator", fields: [initiatorId], references: [id])
+  team           Team            @relation(fields: [teamId], references: [id])
+  gatewayAttempt GatewayAttempt? @relation(fields: [gatewayAttemptId], references: [id])
+  refundRequest  RefundRequest?
+
+  @@unique([type, gatewayAttemptId])
+  @@index([initiatorId])
+  @@index([teamId])
+  @@index([gatewayAttemptId])
+  @@index([accommodationId])
+  @@index([bookingId])
+  @@index([type])
+  @@index([createdAt])
+  @@index([updatedAt])
+  @@index([teamId, createdAt(sort: Desc)])
+  @@map("transactions")
+}
+
+model RefundRequest {
+  id            Int          @id @default(autoincrement())
+  initiatorId   String       @map("initiator_id")
+  teamId        Int          @map("team_id")
+  transactionId Int          @unique @map("transaction_id")
+  cardNumber    String       @map("card_number")
+  amount        BigInt
+  status        RefundStatus @default(pending)
+  metadata      Json?        @map("metadata") @db.JsonB
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @default(now()) @updatedAt @map("updated_at")
+
+  initiator   User        @relation(fields: [initiatorId], references: [id])
+  team        Team        @relation(fields: [teamId], references: [id])
+  transaction Transaction @relation(fields: [transactionId], references: [id])
+
+  @@index([teamId])
+  @@index([initiatorId])
+  @@index([status])
+  @@map("refund_requests")
 }

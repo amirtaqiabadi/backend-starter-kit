@@ -1,4 +1,4 @@
-import { randomInt } from "node:crypto";
+import { createHmac, randomInt } from "node:crypto";
 import { authConfig } from "@/server/config";
 import { getRedis } from "@/server/redis";
 
@@ -50,7 +50,7 @@ export async function storeOtp(input: { phone: string; code: string }): Promise<
     2,
     codeKey(input.phone),
     cooldownKey(input.phone),
-    input.code,
+    digestOtp(input.code),
     String(config.otpTtlSeconds),
     String(config.otpCooldownSeconds),
   );
@@ -74,7 +74,7 @@ export async function verifyOtp(input: { phone: string; code: string }): Promise
     VERIFY_OTP,
     1,
     codeKey(input.phone),
-    input.code,
+    digestOtp(input.code),
     String(config.otpMaxAttempts),
   )) as [string, number];
   if (status === "OK") {
@@ -87,6 +87,22 @@ export async function verifyOtp(input: { phone: string; code: string }): Promise
     return { status: "EXHAUSTED" };
   }
   return { status: "EXPIRED" };
+}
+
+const DEV_OTP_PEPPER = "dev-otp-pepper-not-for-production!!";
+
+/** Why: Redis should not hold the digits a person can type into verify. */
+function digestOtp(code: string): string {
+  return createHmac("sha256", otpPepper()).update(code).digest("base64url");
+}
+
+/** Why: a short code is guessable offline unless the HMAC key stays out of Redis. */
+function otpPepper(env: NodeJS.ProcessEnv = process.env): string {
+  const pepper = env.OTP_PEPPER?.trim() ?? "";
+  if (env.NODE_ENV === "production" && pepper.length < 32) {
+    throw new Error("OTP_PEPPER must be at least 32 characters");
+  }
+  return pepper.length >= 32 ? pepper : DEV_OTP_PEPPER;
 }
 
 /** Why: callers should not rebuild Redis key names. */

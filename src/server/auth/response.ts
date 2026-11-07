@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { authConfig } from "@/server/config";
 import type { AuthFailure } from "@/server/auth/result";
+import { setCsrfCookie } from "@/server/csrf";
+import { secureCookie } from "@/server/http";
 
 /** Why: browsers need both a JSON body and the standard Retry-After header. */
 export function failureResponse(failure: AuthFailure): NextResponse {
@@ -32,9 +34,10 @@ export function jsonWithSession(request: Request, body: unknown, sessionId: stri
     value: sessionId,
     httpOnly: true,
     sameSite: "lax",
-    secure: new URL(request.url).protocol === "https:",
+    secure: secureCookie(request),
     path: "/",
     maxAge: config.sessionAbsoluteSeconds,
   });
+  setCsrfCookie(response, request);
   return response;
 }

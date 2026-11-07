@@ -9,6 +9,7 @@ import { getPrisma } from "@/server/db";
 import { getRedis } from "@/server/redis";
 import { setSmsService, type SmsService } from "@/server/sms";
 import { findOrCreateUserByPhone } from "@/server/auth/users";
+import { deleteAllPaymentRows } from "@/server/payment/clear-tables";
 
 const ORIGIN = "http://localhost:3000";
 
@@ -64,6 +65,7 @@ describe("phone auth flow", () => {
     sms.fail = false;
     setSmsService(sms);
     await getRedis().flushdb();
+    await deleteAllPaymentRows();
     await getPrisma().authEvent.deleteMany();
     await getPrisma().user.deleteMany();
   });
@@ -101,6 +103,9 @@ describe("phone auth flow", () => {
     const issued = await requestOtp(phone);
     const code = sms.codes[0] ?? "";
     expect(code).toMatch(/^\d{5}$/);
+    const storedCode = await getRedis().hget(`otp:code:${phone}`, "code");
+    expect(storedCode).toBeTruthy();
+    expect(storedCode).not.toBe(code);
     const wrongCodes = ["11111", "22222", "33333", "44444"]
       .filter((candidate) => candidate !== code)
       .slice(0, 3);
