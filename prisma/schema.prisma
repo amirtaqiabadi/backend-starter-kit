@@ -8,8 +8,9 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(cuid())
+  id            Int       @id @default(autoincrement())
   phoneNumber   String    @unique @map("phone_number")
+  name          String?
   passwordHash  String?   @map("password_hash")
   passwordSetAt DateTime? @map("password_set_at")
   lastLoginAt   DateTime? @map("last_login_at")
@@ -26,7 +27,7 @@ model User {
 
 model AuthEvent {
   id          String   @id @default(cuid())
-  userId      String?  @map("user_id")
+  userId      Int?     @map("user_id")
   phoneMasked String   @map("phone_masked")
   type        String
   ip          String
@@ -110,7 +111,7 @@ model Team {
 model TeamMember {
   id          Int              @id @default(autoincrement())
   teamId      Int              @map("team_id")
-  userId      String           @map("user_id")
+  userId      Int              @map("user_id")
   displayName String?          @map("display_name")
   role        MemberRole       @default(member) @map("role")
   isActive    Boolean          @default(true) @map("is_active")
@@ -131,7 +132,7 @@ model TeamMember {
 model GatewayAttempt {
   id                     Int                  @id @default(autoincrement())
   merchantCorrelationKey String               @unique @map("merchant_correlation_key") @db.VarChar(64)
-  initiatorId            String               @map("initiator_id")
+  initiatorId            Int                  @map("initiator_id")
   teamId                 Int                  @map("team_id")
   accommodationId        Int?                 @map("accommodation_id")
   type                   GatewayType          @map("type")
@@ -168,7 +169,7 @@ model GatewayAttempt {
 
 model Transaction {
   id                     Int             @id @default(autoincrement())
-  initiatorId            String          @map("initiator_id")
+  initiatorId            Int             @map("initiator_id")
   teamId                 Int             @map("team_id")
   gatewayAttemptId       Int?            @map("gateway_attempt_id")
   accommodationId        Int?            @map("accommodation_id")
@@ -201,7 +202,7 @@ model Transaction {
 
 model RefundRequest {
   id            Int          @id @default(autoincrement())
-  initiatorId   String       @map("initiator_id")
+  initiatorId   Int          @map("initiator_id")
   teamId        Int          @map("team_id")
   transactionId Int          @unique @map("transaction_id")
   cardNumber    String       @map("card_number")

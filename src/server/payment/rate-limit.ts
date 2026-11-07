@@ -2,7 +2,7 @@ import { consumeLimits } from "@/server/auth/rate-limit";
 import { paymentConfig } from "@/server/payment/config";
 
 /** Why: starting payments is cheap to automate, so both the user and the IP share a budget. */
-export async function consumeInitiateLimits(input: { userId: string; ip: string }) {
+export async function consumeInitiateLimits(input: { userId: number; ip: string }) {
   const config = paymentConfig();
   return consumeLimits([
     {

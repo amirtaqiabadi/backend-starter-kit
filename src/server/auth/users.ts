@@ -2,7 +2,7 @@ import { Prisma } from "../../../generated/prisma/client";
 import { getPrisma } from "@/server/db";
 
 export type AuthUser = {
-  id: string;
+  id: number;
   phoneNumber: string;
   passwordHash: string | null;
 };
@@ -29,7 +29,7 @@ export async function findOrCreateUserByPhone(phone: string): Promise<AuthUser> 
 }
 
 /** Why: a login should stamp the account only after the credential check has succeeded. */
-export async function touchLastLogin(userId: string): Promise<void> {
+export async function touchLastLogin(userId: number): Promise<void> {
   await getPrisma().user.update({
     where: { id: userId },
     data: { lastLoginAt: new Date() },

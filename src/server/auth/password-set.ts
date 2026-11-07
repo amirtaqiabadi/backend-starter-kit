@@ -10,7 +10,7 @@ import { getPrisma } from "@/server/db";
 export async function setPassword(input: {
   sessionId: string | null;
   password: string;
-}): Promise<AuthResult<{ userId: string }>> {
+}): Promise<AuthResult<{ userId: number }>> {
   const policyError = policyFailure(input.password);
   if (policyError) {
     return policyError;

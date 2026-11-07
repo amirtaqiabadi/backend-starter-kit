@@ -20,7 +20,7 @@ export type RefundSummary = {
 
 /** Why: a refund request is a manual card payout row, not a second gateway credit. */
 export async function createRefundRequest(input: {
-  userId: string;
+  userId: number;
   transactionId: number;
   cardNumber: unknown;
 }): Promise<PaymentResult<RefundSummary>> {
@@ -103,7 +103,7 @@ export async function createRefundRequest(input: {
 
 /** Why: the attempt row must stay locked until the refund insert commits, or reverse can start in between. */
 async function insertPendingRefund(input: {
-  userId: string;
+  userId: number;
   teamId: number;
   transactionId: number;
   gatewayAttemptId: number | null;
@@ -150,7 +150,7 @@ class RefundRejected extends Error {
 
 /** Why: list responses mask the PAN so logs and Swagger copies cannot leak 16 digits. */
 export async function listRefundRequests(input: {
-  userId: string;
+  userId: number;
   teamId: number;
 }): Promise<PaymentResult<RefundSummary[]>> {
   const owner = await requireOwnerTeam({ userId: input.userId, teamId: input.teamId });

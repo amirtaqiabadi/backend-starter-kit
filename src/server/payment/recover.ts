@@ -9,7 +9,7 @@ import { listUnverified, verifyPayment } from "@/server/payment/zarinpal";
 
 /** Why: a missed callback is recovered by verifying a matching pending attempt, never from the list itself. */
 export async function recoverPayment(input: {
-  userId: string;
+  userId: number;
   authority?: string;
 }): Promise<PaymentResult<{ recovered: number }>> {
   const config = paymentConfig();
@@ -35,7 +35,7 @@ export async function recoverPayment(input: {
   return { ok: true, data: { recovered } };
 }
 
-async function pendingAttempts(input: { userId: string; authority?: string }) {
+async function pendingAttempts(input: { userId: number; authority?: string }) {
   if (input.authority) {
     const attempt = await getPrisma().gatewayAttempt.findFirst({
       where: { sessionToken: input.authority, type: "zarinpal" },

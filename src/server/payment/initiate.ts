@@ -15,7 +15,7 @@ import { requestPayment, startPayUrl } from "@/server/payment/zarinpal";
 
 /** Why: a pending attempt is stored before ZarinPal is called so a failed request still has an auditable row. */
 export async function initiatePayment(input: {
-  userId: string;
+  userId: number;
   amount: unknown;
   description: unknown;
   teamId: number | null;
@@ -108,7 +108,7 @@ export async function initiatePayment(input: {
   return { ok: true, data: { paymentUrl: startPayUrl(requested.authority), attemptId: attempt.id } };
 }
 
-async function insertPendingAttempt(input: { userId: string; teamId: number; amount: bigint }) {
+async function insertPendingAttempt(input: { userId: number; teamId: number; amount: bigint }) {
   const salt = randomBytes(32).toString("base64");
   const created = await getPrisma().gatewayAttempt.create({
     data: {

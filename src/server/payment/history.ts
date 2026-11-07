@@ -15,7 +15,7 @@ export type LedgerRow = {
 
 /** Why: history is the append-only ledger for one team, not a mutable balance field. */
 export async function listTeamTransactions(input: {
-  userId: string;
+  userId: number;
   teamId: number;
 }): Promise<PaymentResult<LedgerRow[]>> {
   const owner = await requireOwnerTeam({ userId: input.userId, teamId: input.teamId });

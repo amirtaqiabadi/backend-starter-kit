@@ -13,7 +13,7 @@ type ReverseLocked = { id: number; metadata: Prisma.JsonValue | null };
 
 /** Why: reverse appends a negative ledger row and never deletes the original credit. */
 export async function reverseAttempt(input: {
-  userId: string;
+  userId: number;
   attemptId: number;
 }): Promise<PaymentResult<{ attemptId: number }>> {
   const attempt = await getPrisma().gatewayAttempt.findUnique({ where: { id: input.attemptId } });
