@@ -2,8 +2,6 @@ import { Prisma } from "../../../generated/prisma/client";
 import { maskCardNumber, parseCardNumber } from "@/domain/payment/card";
 import { paymentMessages } from "@/domain/payment/messages";
 import { getPrisma } from "@/server/db";
-import { decryptCardNumber, encryptCardNumber } from "@/server/payment/card-crypto";
-import { paymentConfig } from "@/server/payment/config";
 import { jsonAmount } from "@/server/payment/metadata";
 import { paymentFail, type PaymentResult } from "@/server/payment/result";
 import { requireOwnerTeam } from "@/server/payment/wallets";
@@ -62,14 +60,6 @@ export async function createRefundRequest(input: {
   if (!owner.ok) {
     return owner;
   }
-  if (paymentConfig().cardEncryptionKey.length < 32) {
-    return paymentFail({
-      status: 503,
-      type: "SYSTEM_ERROR",
-      code: "GATEWAY_UNAVAILABLE",
-      message: paymentMessages.gatewayUnavailable,
-    });
-  }
   try {
     const created = await insertPendingRefund({
       userId: input.userId,
@@ -77,7 +67,7 @@ export async function createRefundRequest(input: {
       transactionId: transaction.id,
       gatewayAttemptId: transaction.gatewayAttemptId,
       amount: transaction.amount,
-      cardNumber: encryptCardNumber(cardNumber),
+      cardNumber,
     });
     return { ok: true, data: toSummary(created) };
   } catch (error) {
@@ -179,15 +169,8 @@ function toSummary(row: {
     transactionId: row.transactionId,
     amount: jsonAmount(row.amount),
     status: row.status,
-    cardNumber: maskStoredCard(row.cardNumber),
+    cardNumber: maskCardNumber(row.cardNumber),
     createdAt: row.createdAt.toISOString(),
   };
 }
 
-function maskStoredCard(stored: string): string {
-  const pan = decryptCardNumber(stored);
-  if (pan) {
-    return maskCardNumber(pan);
-  }
-  return "************";
-}

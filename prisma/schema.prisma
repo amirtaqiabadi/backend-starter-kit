@@ -9,7 +9,7 @@ datasource db {
 
 model User {
   id            Int       @id @default(autoincrement())
-  phoneNumber   String    @unique @map("phone_number")
+  phoneNumber   String    @unique @map("phone_number") @db.Char(11)
   name          String?
   passwordHash  String?   @map("password_hash")
   passwordSetAt DateTime? @map("password_set_at")
@@ -205,7 +205,7 @@ model RefundRequest {
   initiatorId   Int          @map("initiator_id")
   teamId        Int          @map("team_id")
   transactionId Int          @unique @map("transaction_id")
-  cardNumber    String       @map("card_number")
+  cardNumber    String       @map("card_number") @db.Char(16)
   amount        BigInt
   status        RefundStatus @default(pending)
   metadata      Json?        @map("metadata") @db.JsonB

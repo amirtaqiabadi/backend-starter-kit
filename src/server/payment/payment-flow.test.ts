@@ -244,7 +244,7 @@ describe("zarinpal wallet flow", () => {
         initiatorId: attempt.initiatorId,
         teamId: attempt.teamId,
         transactionId: credit.id,
-        cardNumber: "enc:v1:legacy",
+        cardNumber: "5022291234565995",
         amount: credit.amount,
         status: "pending",
       },
@@ -258,7 +258,7 @@ describe("zarinpal wallet flow", () => {
     );
   });
 
-  it("stores an encrypted refund PAN, not the 16 digits", async () => {
+  it("stores the 16-digit refund PAN and masks it in the response", async () => {
     const auth = await register("09120000028");
     const started = await initiateRoute(
       paymentPost("/api/payment/initiate", { amount: 1000, description: "شارژ" }, auth),
@@ -274,8 +274,7 @@ describe("zarinpal wallet flow", () => {
     );
     expect(refunded.status).toBe(201);
     const stored = await getPrisma().refundRequest.findFirstOrThrow({ where: { transactionId: credit.id } });
-    expect(stored.cardNumber).not.toBe("5022291234565995");
-    expect(stored.cardNumber.startsWith("enc:v1:")).toBe(true);
+    expect(stored.cardNumber).toBe("5022291234565995");
     const listed = (await refunded.json()) as { cardNumber: string };
     expect(listed.cardNumber).toBe("502229******5995");
   });

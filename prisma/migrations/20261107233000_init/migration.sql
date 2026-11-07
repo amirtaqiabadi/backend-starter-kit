@@ -1,3 +1,6 @@
+-- CreateSchema
+CREATE SCHEMA IF NOT EXISTS "public";
+
 -- CreateEnum
 CREATE TYPE "MemberRole" AS ENUM ('owner', 'admin', 'member', 'viewer');
 
@@ -17,6 +20,33 @@ CREATE TYPE "GatewayAttemptStatus" AS ENUM ('10-pending', '50-successful', '70-r
 CREATE TYPE "RefundStatus" AS ENUM ('10-pending', '30-processing', '50-paid', '80-rejected', '90-failed');
 
 -- CreateTable
+CREATE TABLE "users" (
+    "id" SERIAL NOT NULL,
+    "phone_number" CHAR(11) NOT NULL,
+    "name" TEXT,
+    "password_hash" TEXT,
+    "password_set_at" TIMESTAMP(3),
+    "last_login_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "users_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "auth_events" (
+    "id" TEXT NOT NULL,
+    "user_id" INTEGER,
+    "phone_masked" TEXT NOT NULL,
+    "type" TEXT NOT NULL,
+    "ip" TEXT NOT NULL,
+    "user_agent" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "auth_events_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "teams" (
     "id" SERIAL NOT NULL,
     "is_active" BOOLEAN NOT NULL DEFAULT true,
@@ -30,7 +60,7 @@ CREATE TABLE "teams" (
 CREATE TABLE "team_members" (
     "id" SERIAL NOT NULL,
     "team_id" INTEGER NOT NULL,
-    "user_id" TEXT NOT NULL,
+    "user_id" INTEGER NOT NULL,
     "display_name" TEXT,
     "role" "MemberRole" NOT NULL DEFAULT 'member',
     "is_active" BOOLEAN NOT NULL DEFAULT true,
@@ -45,7 +75,7 @@ CREATE TABLE "team_members" (
 CREATE TABLE "gateway_attempts" (
     "id" SERIAL NOT NULL,
     "merchant_correlation_key" VARCHAR(64) NOT NULL,
-    "initiator_id" TEXT NOT NULL,
+    "initiator_id" INTEGER NOT NULL,
     "team_id" INTEGER NOT NULL,
     "accommodation_id" INTEGER,
     "type" "GatewayType" NOT NULL,
@@ -71,7 +101,7 @@ CREATE TABLE "gateway_attempts" (
 -- CreateTable
 CREATE TABLE "transactions" (
     "id" SERIAL NOT NULL,
-    "initiator_id" TEXT NOT NULL,
+    "initiator_id" INTEGER NOT NULL,
     "team_id" INTEGER NOT NULL,
     "gateway_attempt_id" INTEGER,
     "accommodation_id" INTEGER,
@@ -90,7 +120,7 @@ CREATE TABLE "transactions" (
 -- CreateTable
 CREATE TABLE "refund_requests" (
     "id" SERIAL NOT NULL,
-    "initiator_id" TEXT NOT NULL,
+    "initiator_id" INTEGER NOT NULL,
     "team_id" INTEGER NOT NULL,
     "transaction_id" INTEGER NOT NULL,
     "card_number" CHAR(16) NOT NULL,
@@ -102,6 +132,9 @@ CREATE TABLE "refund_requests" (
 
     CONSTRAINT "refund_requests_pkey" PRIMARY KEY ("id")
 );
+
+-- CreateIndex
+CREATE UNIQUE INDEX "users_phone_number_key" ON "users"("phone_number");
 
 -- CreateIndex
 CREATE INDEX "teams_updated_at_idx" ON "teams"("updated_at");
@@ -216,3 +249,10 @@ ALTER TABLE "refund_requests" ADD CONSTRAINT "refund_requests_team_id_fkey" FORE
 
 -- AddForeignKey
 ALTER TABLE "refund_requests" ADD CONSTRAINT "refund_requests_transaction_id_fkey" FOREIGN KEY ("transaction_id") REFERENCES "transactions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- Stored numbers stay in the only accepted local Iranian format.
+ALTER TABLE "users" ADD CONSTRAINT "users_phone_number_format" CHECK ("phone_number" ~ '^09[0-9]{9}$');
+
+-- A refund destination is the 16 digits themselves.
+ALTER TABLE "refund_requests" ADD CONSTRAINT "refund_requests_card_number_format" CHECK ("card_number" ~ '^[0-9]{16}$');
+
