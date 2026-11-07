@@ -87,17 +87,62 @@ export function readCookie(request: Request, name: string): string | null {
   return null;
 }
 
-/** Why: the first forwarded hop is the client when a proxy is present. */
-function clientIp(request: Request, fallback: string): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) {
-    const first = forwarded.split(",")[0]?.trim();
-    if (first) {
-      return first;
-    }
+/** Why: the caller can prepend X-Forwarded-For, so only hops added by a configured proxy count. */
+export function resolveClientIp(input: {
+  forwardedFor: string | null;
+  realIp: string | null;
+  trustedProxyCount?: number;
+  fallback?: string;
+}): string {
+  const trustedHops = input.trustedProxyCount ?? 0;
+  const fallback = input.fallback ?? "unknown";
+  if (trustedHops <= 0) {
+    return fallback;
   }
-  const realIp = request.headers.get("x-real-ip")?.trim();
+  const hops = forwardedHops(input.forwardedFor);
+  if (hops.length >= trustedHops) {
+    return hops[hops.length - trustedHops] ?? fallback;
+  }
+  const realIp = input.realIp?.trim() ?? "";
   return realIp || fallback;
+}
+
+/** Why: production must mark cookies Secure even when TLS stops at a proxy in front of this process. */
+export function secureCookie(request: Request, nodeEnv = process.env.NODE_ENV ?? "development"): boolean {
+  if (nodeEnv === "production") {
+    return true;
+  }
+  return new URL(request.url).protocol === "https:";
+}
+
+/** Why: rate-limit keys read one resolved address instead of raw proxy headers. */
+function clientIp(request: Request, fallback: string): string {
+  return resolveClientIp({
+    forwardedFor: request.headers.get("x-forwarded-for"),
+    realIp: request.headers.get("x-real-ip"),
+    trustedProxyCount: trustedProxyCount(),
+    fallback,
+  });
+}
+
+/** Why: zero means the process is reached directly and every forwarded header is caller-controlled. */
+function trustedProxyCount(env: NodeJS.ProcessEnv = process.env): number {
+  const parsed = Number(env.TRUSTED_PROXY_COUNT);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    return 0;
+  }
+  return parsed;
+}
+
+/** Why: proxies append addresses, so empty slots from a trailing comma must not become an identity. */
+function forwardedHops(header: string | null): string[] {
+  if (!header) {
+    return [];
+  }
+  return header
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
 }
 
 /** Why: some runtimes omit the Host header and only expose it on the request URL. */

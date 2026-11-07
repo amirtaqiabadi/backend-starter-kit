@@ -1,7 +1,7 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { NextResponse } from "next/server";
 import { authConfig } from "@/server/config";
-import { readCookie } from "@/server/http";
+import { readCookie, secureCookie } from "@/server/http";
 
 export const CSRF_COOKIE_NAME = "csrf-token";
 export const CSRF_HEADER_NAME = "x-csrf-token";
@@ -18,7 +18,7 @@ export function setCsrfCookie(response: NextResponse, request: Request, token = 
     value: token,
     httpOnly: false,
     sameSite: "strict",
-    secure: new URL(request.url).protocol === "https:",
+    secure: secureCookie(request),
     path: "/",
     maxAge: authConfig().sessionAbsoluteSeconds,
   });

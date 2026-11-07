@@ -103,6 +103,9 @@ describe("phone auth flow", () => {
     const issued = await requestOtp(phone);
     const code = sms.codes[0] ?? "";
     expect(code).toMatch(/^\d{5}$/);
+    const storedCode = await getRedis().hget(`otp:code:${phone}`, "code");
+    expect(storedCode).toBeTruthy();
+    expect(storedCode).not.toBe(code);
     const wrongCodes = ["11111", "22222", "33333", "44444"]
       .filter((candidate) => candidate !== code)
       .slice(0, 3);

@@ -104,6 +104,15 @@ describe("zarinpal wallet flow", () => {
     const listedRefunds = await listRefundsRoute(sessionGet(`/api/payment/refunds?teamId=${wallet.teamId}`, auth.session));
     const refundList = (await listedRefunds.json()) as { refunds: Array<{ cardNumber: string }> };
     expect(refundList.refunds[0]?.cardNumber).toBe("502229******5995");
+
+    const blocked = await reverseRoute(
+      paymentPost("/api/payment/reverse", { attemptId: initiated.attemptId }, auth),
+    );
+    expect(blocked.status).toBe(409);
+    expect(await getPrisma().transaction.count({ where: { type: "Reverse" } })).toBe(0);
+    const stillFunded = await listWalletsRoute(sessionGet("/api/wallets", auth.session));
+    const balances = (await stillFunded.json()) as { wallets: Array<{ availableBalance: number }> };
+    expect(balances.wallets[0]?.availableBalance).toBe(5000);
   });
 
   it("does not verify or credit a NOK callback", async () => {

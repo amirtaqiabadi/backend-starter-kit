@@ -91,6 +91,9 @@ export async function reverseAttempt(input: {
           reverseRow ? paymentMessages.alreadyReversed : paymentMessages.reverseNotAllowed,
         );
       }
+      if (await hasOpenRefund(tx, locked.id)) {
+        throw reverseAbort("REVERSE_NOT_ALLOWED", paymentMessages.reverseNotAllowed);
+      }
       const previous = await lockLatestBalance(tx, locked.team_id);
       if (previous.available < locked.amount) {
         throw reverseAbort("INSUFFICIENT_BALANCE", paymentMessages.insufficientBalance);
@@ -151,6 +154,19 @@ async function finishGatewayReverse(input: {
   throw reverseAbort("GATEWAY_REJECTED", paymentMessages.gatewayRejected);
 }
 
+/** Why: a pending card refund and a gateway reverse would pay the same credit twice. */
+async function hasOpenRefund(tx: ReverseTx, attemptId: number): Promise<boolean> {
+  const refund = await tx.refundRequest.findFirst({
+    where: {
+      status: { notIn: ["rejected", "failed"] },
+      transaction: { gatewayAttemptId: attemptId, type: "GatewayCredit" },
+    },
+    select: { id: true },
+  });
+  return refund !== null;
+}
+
+/** Why: a confirmed gateway reverse must leave the attempt in the terminal reversed status. */
 async function markReversed(tx: ReverseTx, locked: ReverseLocked, reverseCode: number | undefined): Promise<void> {
   await tx.gatewayAttempt.update({
     where: { id: locked.id },

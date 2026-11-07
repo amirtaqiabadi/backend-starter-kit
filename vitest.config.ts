@@ -10,7 +10,7 @@ export default defineConfig({
     hookTimeout: 30_000,
     env: {
       DATABASE_URL: "postgresql://app:app@127.0.0.1:5433/auth_test",
-      REDIS_URL: "redis://127.0.0.1:6379/1",
+      REDIS_URL: "redis://:app@127.0.0.1:6379/1",
       SMS_PROVIDER: "console",
       SMS_DEV_LOG: "false",
       NODE_ENV: "test",
