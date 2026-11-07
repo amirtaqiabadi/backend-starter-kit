@@ -1,11 +1,7 @@
--- CreateSchema
-CREATE SCHEMA IF NOT EXISTS "public";
-
 -- CreateTable
 CREATE TABLE "users" (
-    "id" SERIAL NOT NULL,
+    "id" TEXT NOT NULL,
     "phone_number" TEXT NOT NULL,
-    "name" TEXT,
     "password_hash" TEXT,
     "password_set_at" TIMESTAMP(3),
     "last_login_at" TIMESTAMP(3),
@@ -18,7 +14,7 @@ CREATE TABLE "users" (
 -- CreateTable
 CREATE TABLE "auth_events" (
     "id" TEXT NOT NULL,
-    "user_id" INTEGER,
+    "user_id" TEXT,
     "phone_masked" TEXT NOT NULL,
     "type" TEXT NOT NULL,
     "ip" TEXT NOT NULL,

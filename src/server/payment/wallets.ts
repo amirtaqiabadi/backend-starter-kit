@@ -15,7 +15,7 @@ export type WalletSummary = {
 
 /** Why: charging a team is allowed only for an active owner of that team. */
 export async function requireOwnerTeam(input: {
-  userId: string;
+  userId: number;
   teamId: number;
 }): Promise<PaymentResult<{ teamId: number }>> {
   const membership = await getPrisma().teamMember.findFirst({
@@ -41,7 +41,7 @@ export async function requireOwnerTeam(input: {
 
 /** Why: omitting teamId creates a personal wallet only when the user has no active membership. */
 export async function resolveChargeTeam(input: {
-  userId: string;
+  userId: number;
   teamId: number | null;
 }): Promise<PaymentResult<{ teamId: number }>> {
   if (input.teamId !== null) {
@@ -66,7 +66,7 @@ export async function resolveChargeTeam(input: {
 
 /** Why: a second wallet is a new team whose creator is the owner. */
 export async function createWallet(input: {
-  userId: string;
+  userId: number;
   displayName: unknown;
 }): Promise<PaymentResult<WalletSummary>> {
   const displayName = parseWalletName(input.displayName);
@@ -92,7 +92,7 @@ export async function createWallet(input: {
 }
 
 /** Why: the list shows every active membership and reads balance from the latest ledger row. */
-export async function listWallets(userId: string): Promise<WalletSummary[]> {
+export async function listWallets(userId: number): Promise<WalletSummary[]> {
   const memberships = await getPrisma().teamMember.findMany({
     where: { userId, isActive: true, status: "active", team: { isActive: true } },
     orderBy: { teamId: "asc" },
@@ -110,7 +110,7 @@ export async function listWallets(userId: string): Promise<WalletSummary[]> {
   });
 }
 
-async function createOwnedWallet(input: { userId: string; displayName: string }) {
+async function createOwnedWallet(input: { userId: number; displayName: string }) {
   return getPrisma().$transaction(async (tx) => {
     const team = await tx.team.create({ data: {} });
     await tx.teamMember.create({

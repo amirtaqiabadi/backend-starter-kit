@@ -8,7 +8,7 @@ import type { ZarinpalVerifyResult } from "@/server/payment/zarinpal";
 
 type LockedAttempt = {
   id: number;
-  initiator_id: string;
+  initiator_id: number;
   team_id: number;
   status: string;
   amount: bigint;
