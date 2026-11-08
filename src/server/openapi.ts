@@ -88,7 +88,7 @@ export function openApiDocument() {
           tags: ["auth"],
           summary: "تأیید کد و ساخت نشست",
           description:
-            "purpose برابر RESET_PASSWORD علاوه بر نشست، اجازهٔ یک‌بار تغییر رمز را برای همین نشست فعال می‌کند.",
+            "purpose برابر RESET_PASSWORD علاوه بر نشست، اجازهٔ یک‌بار تغییر رمز را برای همین نشست فعال می‌کند. token اختیاری است و فقط وقتی حساب همین حالا ساخته می‌شود به دعوت‌کننده وصل می‌شود. توکن نامعتبر ورود را رد نمی‌کند.",
           requestBody: jsonBody({
             required: ["phoneNumber", "code"],
             properties: {
@@ -96,6 +96,7 @@ export function openApiDocument() {
               code: { type: "string", pattern: "^\\d{5}$" },
               purpose: { type: "string", enum: ["LOGIN", "RESET_PASSWORD"], default: "LOGIN" },
               next: nextSchema,
+              token: tokenSchema,
             },
           }),
           responses: {
@@ -110,6 +111,21 @@ export function openApiDocument() {
             "400": errorResponse,
             "401": errorResponse,
             "403": errorResponse,
+          },
+        },
+      },
+      "/api/auth/token": {
+        get: {
+          tags: ["auth"],
+          summary: "توکن عمومی کاربر جاری",
+          security: [{ sessionCookie: [] }],
+          responses: {
+            "200": jsonResponse("توکن دعوت", {
+              type: "object",
+              required: ["token"],
+              properties: { token: { type: "string", pattern: "^[ACDEFGHJKMNPQRTVWXYZ234679]{5}$" } },
+            }),
+            "401": errorResponse,
           },
         },
       },
@@ -426,6 +442,11 @@ export function openApiDocument() {
 const phoneSchema = { type: "string", pattern: "^09\\d{9}$", example: "09123456789" };
 const passwordSchema = { type: "string", minLength: 8, maxLength: 128 };
 const nextSchema = { type: "string", description: "فقط یک مسیر نسبی با یک اسلش ابتدایی." };
+const tokenSchema = {
+  type: "string",
+  description: "توکن دعوت‌کننده. فاصله و خط تیره نادیده گرفته می‌شود.",
+  example: "A2C46",
+};
 const okSchema = {
   type: "object",
   required: ["ok"],

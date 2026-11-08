@@ -49,6 +49,7 @@ describe("zarinpal wallet flow", () => {
     await getRedis().flushdb();
     await deleteAllPaymentRows();
     await getPrisma().authEvent.deleteMany();
+    await getPrisma().user.updateMany({ data: { referredById: null } });
     await getPrisma().user.deleteMany();
   });
 

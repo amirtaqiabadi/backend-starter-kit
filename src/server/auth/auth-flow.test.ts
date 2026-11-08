@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { POST as identify } from "@/app/api/auth/identify/route";
 import { POST as requestOtpRoute } from "@/app/api/auth/otp/request/route";
 import { POST as verifyOtpRoute } from "@/app/api/auth/otp/verify/route";
+import { GET as tokenRoute } from "@/app/api/auth/token/route";
 import { POST as loginRoute } from "@/app/api/auth/password/login/route";
 import { POST as resetRoute } from "@/app/api/auth/password/reset/route";
 import { POST as setRoute } from "@/app/api/auth/password/set/route";
@@ -44,6 +45,15 @@ function post(path: string, body: unknown, cookie = ""): Request {
   });
 }
 
+/** Why: the token read is a cookie-authenticated GET with no body. */
+function get(path: string, cookie = ""): Request {
+  const headers = new Headers();
+  if (cookie) {
+    headers.set("cookie", cookie);
+  }
+  return new Request(`${ORIGIN}${path}`, { method: "GET", headers });
+}
+
 /** Why: later calls need the session cookie the login response just set. */
 function sessionCookie(response: Response): string {
   const cookies = response.headers.getSetCookie();
@@ -67,6 +77,7 @@ describe("phone auth flow", () => {
     await getRedis().flushdb();
     await deleteAllPaymentRows();
     await getPrisma().authEvent.deleteMany();
+    await getPrisma().user.updateMany({ data: { referredById: null } });
     await getPrisma().user.deleteMany();
   });
 
@@ -284,6 +295,46 @@ describe("phone auth flow", () => {
     expect(signedIn.status).toBe(200);
   });
 
+  it("records a referral only while the account is being created", async () => {
+    const inviter = await register("09120000017");
+    const inviterToken = await readToken(inviter);
+    const pretty = ` ${inviterToken.slice(0, 2).toLowerCase()}-${inviterToken.slice(2)} `;
+    const invited = await register("09120000018", pretty);
+    expect(invited.status).toBe(200);
+    const inviterRow = await getPrisma().user.findUnique({ where: { phoneNumber: "09120000017" } });
+    const invitedRow = await getPrisma().user.findUnique({ where: { phoneNumber: "09120000018" } });
+    expect(invitedRow?.referredById).toBe(inviterRow?.id);
+
+    const unknownToken = inviterToken === "ZZZZZ" ? "YYYYY" : "ZZZZZ";
+    const unknown = await register("09120000019", unknownToken);
+    expect(unknown.status).toBe(200);
+    const unknownRow = await getPrisma().user.findUnique({ where: { phoneNumber: "09120000019" } });
+    expect(unknownRow?.referredById).toBeNull();
+
+    await getRedis().del("otp:cooldown:09120000018");
+    await requestOtp("09120000018");
+    const code = sms.codes.at(-1) ?? "";
+    const again = await verifyOtpRoute(
+      post("/api/auth/otp/verify", { phoneNumber: "09120000018", code, token: unknownToken }),
+    );
+    expect(again.status).toBe(200);
+    const still = await getPrisma().user.findUnique({ where: { phoneNumber: "09120000018" } });
+    expect(still?.referredById).toBe(inviterRow?.id);
+  });
+
+  it("returns the signed-in token and rejects a missing session", async () => {
+    const missing = await tokenRoute(get("/api/auth/token"));
+    expect(missing.status).toBe(401);
+
+    const registered = await register("09120000020");
+    const response = await tokenRoute(get("/api/auth/token", sessionCookie(registered)));
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { token: string };
+    expect(body.token).toMatch(/^[ACDEFGHJKMNPQRTVWXYZ234679]{5}$/);
+    const row = await getPrisma().user.findUnique({ where: { phoneNumber: "09120000020" } });
+    expect(body.token).toBe(row?.token.trim());
+  });
+
   it("falls back when next is an open redirect", async () => {
     await setPassword("09120000016", "long-password");
     const protocolRelative = await login("09120000016", "long-password", "//evil.com");
@@ -309,11 +360,22 @@ async function requestOtp(phone: string): Promise<Response> {
 }
 
 /** Why: registration in these tests is a successful OTP verify. */
-async function register(phone: string): Promise<Response> {
+async function register(phone: string, token = ""): Promise<Response> {
   await getRedis().del(`otp:cooldown:${phone}`);
   await requestOtp(phone);
   const code = sms.codes.at(-1) ?? "";
-  return verifyOtpRoute(post("/api/auth/otp/verify", { phoneNumber: phone, code }));
+  const body = token ? { phoneNumber: phone, code, token } : { phoneNumber: phone, code };
+  return verifyOtpRoute(post("/api/auth/otp/verify", body));
+}
+
+/** Why: referral cases need the public token the session is allowed to read. */
+async function readToken(response: Response): Promise<string> {
+  const tokenResponse = await tokenRoute(get("/api/auth/token", sessionCookie(response)));
+  if (tokenResponse.status !== 200) {
+    throw new Error(`read token failed: ${tokenResponse.status}`);
+  }
+  const body = (await tokenResponse.json()) as { token: string };
+  return body.token;
 }
 
 /** Why: password cases need an account that already has a hash. */
