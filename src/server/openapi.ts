@@ -1,3 +1,5 @@
+import { API_PREFIX } from "@/server/api-prefix";
+
 /** Why: the contract is served from this process so a separate frontend can read the same spec as Swagger. */
 export function openApiDocument() {
   return {
@@ -9,8 +11,8 @@ export function openApiDocument() {
         "احراز هویت با شماره موبایل ایران و شارژ کیف‌پول زرین‌پال. همهٔ درخواست‌های POST باید هدر Origin هم‌مبدأ با Host داشته باشند. نشست موفق در کوکی HttpOnly به نام session قرار می‌گیرد. POSTهای کیف علاوه بر Origin به هدر x-csrf-token نیاز دارند.",
     },
     tags: [{ name: "auth" }, { name: "wallets" }, { name: "payment" }],
-    paths: {
-      "/api/auth/identify": {
+    paths: withApiPrefix({
+      "/auth/identify": {
         post: {
           tags: ["auth"],
           summary: "انتخاب مرحلهٔ بعد",
@@ -31,7 +33,7 @@ export function openApiDocument() {
           },
         },
       },
-      "/api/auth/password/login": {
+      "/auth/password/login": {
         post: {
           tags: ["auth"],
           summary: "ورود با رمز",
@@ -57,7 +59,7 @@ export function openApiDocument() {
           },
         },
       },
-      "/api/auth/otp/request": {
+      "/auth/otp/request": {
         post: {
           tags: ["auth"],
           summary: "درخواست کد پیامکی",
@@ -83,7 +85,7 @@ export function openApiDocument() {
           },
         },
       },
-      "/api/auth/otp/verify": {
+      "/auth/otp/verify": {
         post: {
           tags: ["auth"],
           summary: "تأیید کد و ساخت نشست",
@@ -114,7 +116,7 @@ export function openApiDocument() {
           },
         },
       },
-      "/api/auth/token": {
+      "/auth/token": {
         get: {
           tags: ["auth"],
           summary: "توکن عمومی کاربر جاری",
@@ -129,7 +131,7 @@ export function openApiDocument() {
           },
         },
       },
-      "/api/auth/password/set": {
+      "/auth/password/set": {
         post: {
           tags: ["auth"],
           summary: "تنظیم رمز برای حساب بدون رمز",
@@ -147,7 +149,7 @@ export function openApiDocument() {
           },
         },
       },
-      "/api/auth/password/reset": {
+      "/auth/password/reset": {
         post: {
           tags: ["auth"],
           summary: "جایگزینی رمز بعد از تأیید کد",
@@ -165,7 +167,7 @@ export function openApiDocument() {
           },
         },
       },
-      "/api/wallets": {
+      "/wallets": {
         get: {
           tags: ["wallets"],
           summary: "لیست کیف‌های فعال",
@@ -196,7 +198,7 @@ export function openApiDocument() {
           },
         },
       },
-      "/api/wallets/{teamId}/transactions": {
+      "/wallets/{teamId}/transactions": {
         get: {
           tags: ["wallets"],
           summary: "تاریخچهٔ دفترکل یک کیف",
@@ -213,7 +215,7 @@ export function openApiDocument() {
           },
         },
       },
-      "/api/payment/initiate": {
+      "/payment/initiate": {
         post: {
           tags: ["payment"],
           summary: "شروع شارژ با زرین‌پال",
@@ -244,7 +246,7 @@ export function openApiDocument() {
           },
         },
       },
-      "/api/payment/callback/zarinpal": {
+      "/payment/callback/zarinpal": {
         get: {
           tags: ["payment"],
           summary: "بازگشت زرین‌پال",
@@ -259,7 +261,7 @@ export function openApiDocument() {
           },
         },
       },
-      "/api/payment/reverse": {
+      "/payment/reverse": {
         post: {
           tags: ["payment"],
           summary: "برگشت درگاه تا ۳۰ دقیقه، مگر اینکه استرداد کارت باز باشد",
@@ -282,7 +284,7 @@ export function openApiDocument() {
           },
         },
       },
-      "/api/payment/refunds": {
+      "/payment/refunds": {
         get: {
           tags: ["payment"],
           summary: "لیست درخواست‌های استرداد کارت",
@@ -318,7 +320,7 @@ export function openApiDocument() {
           },
         },
       },
-      "/api/payment/recover": {
+      "/payment/recover": {
         post: {
           tags: ["payment"],
           summary: "بازیابی پرداخت بدون کال‌بک",
@@ -339,7 +341,7 @@ export function openApiDocument() {
           },
         },
       },
-    },
+    }),
     components: {
       securitySchemes: {
         sessionCookie: { type: "apiKey", in: "cookie", name: "session" },
@@ -437,6 +439,11 @@ export function openApiDocument() {
       },
     },
   };
+}
+
+/** Why: published paths stay on the same version segment as the route folders. */
+function withApiPrefix(paths: Record<string, object>) {
+  return Object.fromEntries(Object.entries(paths).map(([path, operation]) => [`${API_PREFIX}${path}`, operation]));
 }
 
 const phoneSchema = { type: "string", pattern: "^09\\d{9}$", example: "09123456789" };

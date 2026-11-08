@@ -1,11 +1,11 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { POST as identify } from "@/app/api/auth/identify/route";
-import { POST as requestOtpRoute } from "@/app/api/auth/otp/request/route";
-import { POST as verifyOtpRoute } from "@/app/api/auth/otp/verify/route";
-import { GET as tokenRoute } from "@/app/api/auth/token/route";
-import { POST as loginRoute } from "@/app/api/auth/password/login/route";
-import { POST as resetRoute } from "@/app/api/auth/password/reset/route";
-import { POST as setRoute } from "@/app/api/auth/password/set/route";
+import { POST as identify } from "@/app/api/v1/auth/identify/route";
+import { POST as requestOtpRoute } from "@/app/api/v1/auth/otp/request/route";
+import { POST as verifyOtpRoute } from "@/app/api/v1/auth/otp/verify/route";
+import { GET as tokenRoute } from "@/app/api/v1/auth/token/route";
+import { POST as loginRoute } from "@/app/api/v1/auth/password/login/route";
+import { POST as resetRoute } from "@/app/api/v1/auth/password/reset/route";
+import { POST as setRoute } from "@/app/api/v1/auth/password/set/route";
 import { getPrisma } from "@/server/db";
 import { getRedis } from "@/server/redis";
 import { setSmsService, type SmsService } from "@/server/sms";
@@ -87,24 +87,24 @@ describe("phone auth flow", () => {
   });
 
   it("chooses OTP when the number is new or has no password, and PASSWORD when it does", async () => {
-    const fresh = await identify(post("/api/auth/identify", { phoneNumber: "09120000001" }));
+    const fresh = await identify(post("/api/v1/auth/identify", { phoneNumber: "09120000001" }));
     expect(await fresh.json()).toEqual({ nextStep: "OTP" });
 
     await register("09120000002");
-    const noPassword = await identify(post("/api/auth/identify", { phoneNumber: "09120000002" }));
+    const noPassword = await identify(post("/api/v1/auth/identify", { phoneNumber: "09120000002" }));
     expect(await noPassword.json()).toEqual({ nextStep: "OTP" });
 
     await setPassword("09120000003", "long-password");
-    const withPassword = await identify(post("/api/auth/identify", { phoneNumber: "09120000003" }));
+    const withPassword = await identify(post("/api/v1/auth/identify", { phoneNumber: "09120000003" }));
     expect(await withPassword.json()).toEqual({ nextStep: "PASSWORD" });
   });
 
   it("rate-limits identify", async () => {
     for (let attempt = 0; attempt < 10; attempt += 1) {
-      const response = await identify(post("/api/auth/identify", { phoneNumber: "09120000004" }));
+      const response = await identify(post("/api/v1/auth/identify", { phoneNumber: "09120000004" }));
       expect(response.status).toBe(200);
     }
-    const blocked = await identify(post("/api/auth/identify", { phoneNumber: "09120000004" }));
+    const blocked = await identify(post("/api/v1/auth/identify", { phoneNumber: "09120000004" }));
     expect(blocked.status).toBe(429);
     expect(blocked.headers.get("retry-after")).toBeTruthy();
   });
@@ -122,23 +122,23 @@ describe("phone auth flow", () => {
       .slice(0, 3);
 
     const wrong = await verifyOtpRoute(
-      post("/api/auth/otp/verify", { phoneNumber: phone, code: wrongCodes[0] }),
+      post("/api/v1/auth/otp/verify", { phoneNumber: phone, code: wrongCodes[0] }),
     );
     expect(wrong.status).toBe(401);
     expect(await wrong.json()).toMatchObject({ error: { code: "OTP_MISMATCH", attemptsRemaining: 2 } });
 
     const second = await verifyOtpRoute(
-      post("/api/auth/otp/verify", { phoneNumber: phone, code: wrongCodes[1] }),
+      post("/api/v1/auth/otp/verify", { phoneNumber: phone, code: wrongCodes[1] }),
     );
     expect(await second.json()).toMatchObject({ error: { attemptsRemaining: 1 } });
 
     const third = await verifyOtpRoute(
-      post("/api/auth/otp/verify", { phoneNumber: phone, code: wrongCodes[2] }),
+      post("/api/v1/auth/otp/verify", { phoneNumber: phone, code: wrongCodes[2] }),
     );
     expect(await third.json()).toMatchObject({ error: { code: "OTP_EXHAUSTED" } });
 
     const afterExhausted = await verifyOtpRoute(
-      post("/api/auth/otp/verify", { phoneNumber: phone, code }),
+      post("/api/v1/auth/otp/verify", { phoneNumber: phone, code }),
     );
     expect(await afterExhausted.json()).toMatchObject({ error: { code: "OTP_EXPIRED" } });
 
@@ -147,16 +147,16 @@ describe("phone auth flow", () => {
     const current = sms.codes.at(-1) ?? "";
     await getRedis().pexpire(`otp:code:${phone}`, 1);
     await new Promise((resolve) => setTimeout(resolve, 20));
-    const expired = await verifyOtpRoute(post("/api/auth/otp/verify", { phoneNumber: phone, code: current }));
+    const expired = await verifyOtpRoute(post("/api/v1/auth/otp/verify", { phoneNumber: phone, code: current }));
     expect(await expired.json()).toMatchObject({ error: { code: "OTP_EXPIRED" } });
 
     await clearOtpLimits(phone);
     await requestOtp(phone);
     const live = sms.codes.at(-1) ?? "";
     const persian = live.replace(/\d/g, (digit) => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)] ?? digit);
-    const success = await verifyOtpRoute(post("/api/auth/otp/verify", { phoneNumber: phone, code: persian }));
+    const success = await verifyOtpRoute(post("/api/v1/auth/otp/verify", { phoneNumber: phone, code: persian }));
     expect(success.status).toBe(200);
-    const reused = await verifyOtpRoute(post("/api/auth/otp/verify", { phoneNumber: phone, code: live }));
+    const reused = await verifyOtpRoute(post("/api/v1/auth/otp/verify", { phoneNumber: phone, code: live }));
     expect(reused.status).toBe(401);
 
     await clearOtpLimits(phone);
@@ -165,9 +165,9 @@ describe("phone auth flow", () => {
     await clearOtpLimits(phone);
     await requestOtp(phone);
     const latest = sms.codes.at(-1) ?? "";
-    const stale = await verifyOtpRoute(post("/api/auth/otp/verify", { phoneNumber: phone, code: previous }));
+    const stale = await verifyOtpRoute(post("/api/v1/auth/otp/verify", { phoneNumber: phone, code: previous }));
     expect(stale.status).toBe(401);
-    const fresh = await verifyOtpRoute(post("/api/auth/otp/verify", { phoneNumber: phone, code: latest }));
+    const fresh = await verifyOtpRoute(post("/api/v1/auth/otp/verify", { phoneNumber: phone, code: latest }));
     expect(fresh.status).toBe(200);
     expect(issued.status).toBe(200);
   });
@@ -205,7 +205,7 @@ describe("phone auth flow", () => {
     const code = sms.codes.at(-1) ?? "";
     const results = await Promise.all(
       Array.from({ length: 8 }, () =>
-        verifyOtpRoute(post("/api/auth/otp/verify", { phoneNumber: phone, code })),
+        verifyOtpRoute(post("/api/v1/auth/otp/verify", { phoneNumber: phone, code })),
       ),
     );
     expect(results.filter((response) => response.status === 200)).toHaveLength(1);
@@ -245,17 +245,17 @@ describe("phone auth flow", () => {
 
   it("sets a password only once and only with a session", async () => {
     const missing = await setRoute(
-      post("/api/auth/password/set", { password: "long-password" }),
+      post("/api/v1/auth/password/set", { password: "long-password" }),
     );
     expect(missing.status).toBe(401);
 
     const registered = await register("09120000014");
     const first = await setRoute(
-      post("/api/auth/password/set", { password: "long-password" }, sessionCookie(registered)),
+      post("/api/v1/auth/password/set", { password: "long-password" }, sessionCookie(registered)),
     );
     expect(first.status).toBe(200);
     const second = await setRoute(
-      post("/api/auth/password/set", { password: "another-password" }, sessionCookie(registered)),
+      post("/api/v1/auth/password/set", { password: "another-password" }, sessionCookie(registered)),
     );
     expect(second.status).toBe(409);
   });
@@ -269,17 +269,17 @@ describe("phone auth flow", () => {
     await requestOtp(phone);
     const code = sms.codes.at(-1) ?? "";
     const resetLogin = await verifyOtpRoute(
-      post("/api/auth/otp/verify", { phoneNumber: phone, code, purpose: "RESET_PASSWORD" }),
+      post("/api/v1/auth/otp/verify", { phoneNumber: phone, code, purpose: "RESET_PASSWORD" }),
     );
     expect(resetLogin.status).toBe(200);
 
     const withoutFlag = await resetRoute(
-      post("/api/auth/password/reset", { password: "replacement-1" }, sessionCookie(second)),
+      post("/api/v1/auth/password/reset", { password: "replacement-1" }, sessionCookie(second)),
     );
     expect(withoutFlag.status).toBe(403);
 
     const reset = await resetRoute(
-      post("/api/auth/password/reset", { password: "replacement-1" }, sessionCookie(resetLogin)),
+      post("/api/v1/auth/password/reset", { password: "replacement-1" }, sessionCookie(resetLogin)),
     );
     expect(reset.status).toBe(200);
     expect(await getRedis().exists(`session:${sessionId(first)}`)).toBe(0);
@@ -288,7 +288,7 @@ describe("phone auth flow", () => {
     expect(await getRedis().exists(`session:${sessionId(resetLogin)}`)).toBe(1);
 
     const again = await resetRoute(
-      post("/api/auth/password/reset", { password: "replacement-2" }, sessionCookie(resetLogin)),
+      post("/api/v1/auth/password/reset", { password: "replacement-2" }, sessionCookie(resetLogin)),
     );
     expect(again.status).toBe(403);
     const signedIn = await login(phone, "replacement-1");
@@ -315,7 +315,7 @@ describe("phone auth flow", () => {
     await requestOtp("09120000018");
     const code = sms.codes.at(-1) ?? "";
     const again = await verifyOtpRoute(
-      post("/api/auth/otp/verify", { phoneNumber: "09120000018", code, token: unknownToken }),
+      post("/api/v1/auth/otp/verify", { phoneNumber: "09120000018", code, token: unknownToken }),
     );
     expect(again.status).toBe(200);
     const still = await getPrisma().user.findUnique({ where: { phoneNumber: "09120000018" } });
@@ -323,11 +323,11 @@ describe("phone auth flow", () => {
   });
 
   it("returns the signed-in token and rejects a missing session", async () => {
-    const missing = await tokenRoute(get("/api/auth/token"));
+    const missing = await tokenRoute(get("/api/v1/auth/token"));
     expect(missing.status).toBe(401);
 
     const registered = await register("09120000020");
-    const response = await tokenRoute(get("/api/auth/token", sessionCookie(registered)));
+    const response = await tokenRoute(get("/api/v1/auth/token", sessionCookie(registered)));
     expect(response.status).toBe(200);
     const body = (await response.json()) as { token: string };
     expect(body.token).toMatch(/^[ACDEFGHJKMNPQRTVWXYZ234679]{5}$/);
@@ -356,7 +356,7 @@ async function clearOtpLimits(phone: string): Promise<void> {
 
 /** Why: most cases start from a freshly issued OTP. */
 async function requestOtp(phone: string): Promise<Response> {
-  return requestOtpRoute(post("/api/auth/otp/request", { phoneNumber: phone }));
+  return requestOtpRoute(post("/api/v1/auth/otp/request", { phoneNumber: phone }));
 }
 
 /** Why: registration in these tests is a successful OTP verify. */
@@ -365,12 +365,12 @@ async function register(phone: string, token = ""): Promise<Response> {
   await requestOtp(phone);
   const code = sms.codes.at(-1) ?? "";
   const body = token ? { phoneNumber: phone, code, token } : { phoneNumber: phone, code };
-  return verifyOtpRoute(post("/api/auth/otp/verify", body));
+  return verifyOtpRoute(post("/api/v1/auth/otp/verify", body));
 }
 
 /** Why: referral cases need the public token the session is allowed to read. */
 async function readToken(response: Response): Promise<string> {
-  const tokenResponse = await tokenRoute(get("/api/auth/token", sessionCookie(response)));
+  const tokenResponse = await tokenRoute(get("/api/v1/auth/token", sessionCookie(response)));
   if (tokenResponse.status !== 200) {
     throw new Error(`read token failed: ${tokenResponse.status}`);
   }
@@ -382,7 +382,7 @@ async function readToken(response: Response): Promise<string> {
 async function setPassword(phone: string, password: string): Promise<Response> {
   const registered = await register(phone);
   const response = await setRoute(
-    post("/api/auth/password/set", { password }, sessionCookie(registered)),
+    post("/api/v1/auth/password/set", { password }, sessionCookie(registered)),
   );
   if (response.status !== 200) {
     throw new Error(`set password failed: ${response.status}`);
@@ -392,5 +392,5 @@ async function setPassword(phone: string, password: string): Promise<Response> {
 
 /** Why: login assertions share one request shape. */
 async function login(phone: string, password: string, next = "/"): Promise<Response> {
-  return loginRoute(post("/api/auth/password/login", { phoneNumber: phone, password, next }));
+  return loginRoute(post("/api/v1/auth/password/login", { phoneNumber: phone, password, next }));
 }

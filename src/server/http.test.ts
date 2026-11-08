@@ -35,7 +35,7 @@ describe("resolveClientIp", () => {
 
 describe("secureCookie", () => {
   it("is always set in production, including when the app itself sees http", () => {
-    const request = new Request("http://localhost:3000/api/auth/otp/verify");
+    const request = new Request("http://localhost:3000/api/v1/auth/otp/verify");
     expect(secureCookie(request, "production")).toBe(true);
     expect(secureCookie(request, "development")).toBe(false);
   });

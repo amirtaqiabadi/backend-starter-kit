@@ -1,13 +1,13 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
-import { POST as requestOtpRoute } from "@/app/api/auth/otp/request/route";
-import { POST as verifyOtpRoute } from "@/app/api/auth/otp/verify/route";
-import { GET as callbackRoute } from "@/app/api/payment/callback/zarinpal/route";
-import { POST as initiateRoute } from "@/app/api/payment/initiate/route";
-import { POST as recoverRoute } from "@/app/api/payment/recover/route";
-import { GET as listRefundsRoute, POST as createRefundRoute } from "@/app/api/payment/refunds/route";
-import { POST as reverseRoute } from "@/app/api/payment/reverse/route";
-import { GET as listWalletsRoute, POST as createWalletRoute } from "@/app/api/wallets/route";
-import { GET as listTransactionsRoute } from "@/app/api/wallets/[teamId]/transactions/route";
+import { POST as requestOtpRoute } from "@/app/api/v1/auth/otp/request/route";
+import { POST as verifyOtpRoute } from "@/app/api/v1/auth/otp/verify/route";
+import { GET as callbackRoute } from "@/app/api/v1/payment/callback/zarinpal/route";
+import { POST as initiateRoute } from "@/app/api/v1/payment/initiate/route";
+import { POST as recoverRoute } from "@/app/api/v1/payment/recover/route";
+import { GET as listRefundsRoute, POST as createRefundRoute } from "@/app/api/v1/payment/refunds/route";
+import { POST as reverseRoute } from "@/app/api/v1/payment/reverse/route";
+import { GET as listWalletsRoute, POST as createWalletRoute } from "@/app/api/v1/wallets/route";
+import { GET as listTransactionsRoute } from "@/app/api/v1/wallets/[teamId]/transactions/route";
 import { callbackHmacPayload, signCallbackHmac } from "@/domain/payment/hmac";
 import { getPrisma } from "@/server/db";
 import { getRedis } from "@/server/redis";
@@ -64,12 +64,12 @@ describe("zarinpal wallet flow", () => {
 
   it("credits once, rejects a second callback, and masks a refund card", async () => {
     const auth = await register("09120000021");
-    const created = await createWalletRoute(paymentPost("/api/wallets", { displayName: "Travel" }, auth));
+    const created = await createWalletRoute(paymentPost("/api/v1/wallets", { displayName: "Travel" }, auth));
     expect(created.status).toBe(201);
     const wallet = (await created.json()) as { teamId: number };
 
     const started = await initiateRoute(
-      paymentPost("/api/payment/initiate", { amount: 5000, description: "شارژ", teamId: wallet.teamId }, auth),
+      paymentPost("/api/v1/payment/initiate", { amount: 5000, description: "شارژ", teamId: wallet.teamId }, auth),
     );
     expect(started.status).toBe(200);
     const initiated = (await started.json()) as { paymentUrl: string; attemptId: number };
@@ -81,7 +81,7 @@ describe("zarinpal wallet flow", () => {
     expect(ok.status).toBeLessThan(400);
     expect(ok.headers.get("location")).toContain("payment=ok");
 
-    const wallets = await listWalletsRoute(sessionGet("/api/wallets", auth.session));
+    const wallets = await listWalletsRoute(sessionGet("/api/v1/wallets", auth.session));
     const listed = (await wallets.json()) as { wallets: Array<{ availableBalance: number }> };
     expect(listed.wallets[0]?.availableBalance).toBe(5000);
 
@@ -90,28 +90,28 @@ describe("zarinpal wallet flow", () => {
     const afterSecond = await getPrisma().transaction.count({ where: { type: "GatewayCredit" } });
     expect(afterSecond).toBe(1);
 
-    const history = await listTransactionsRoute(sessionGet(`/api/wallets/${wallet.teamId}/transactions`, auth.session), {
+    const history = await listTransactionsRoute(sessionGet(`/api/v1/wallets/${wallet.teamId}/transactions`, auth.session), {
       params: Promise.resolve({ teamId: String(wallet.teamId) }),
     });
     const rows = (await history.json()) as { transactions: Array<{ id: number; type: string }> };
     const creditId = rows.transactions[0]?.id ?? 0;
     const refunded = await createRefundRoute(
-      paymentPost("/api/payment/refunds", { transactionId: creditId, cardNumber: "5022291234565995" }, auth),
+      paymentPost("/api/v1/payment/refunds", { transactionId: creditId, cardNumber: "5022291234565995" }, auth),
     );
     expect(refunded.status).toBe(201);
     const refundBody = (await refunded.json()) as { cardNumber: string };
     expect(refundBody.cardNumber).toBe("502229******5995");
 
-    const listedRefunds = await listRefundsRoute(sessionGet(`/api/payment/refunds?teamId=${wallet.teamId}`, auth.session));
+    const listedRefunds = await listRefundsRoute(sessionGet(`/api/v1/payment/refunds?teamId=${wallet.teamId}`, auth.session));
     const refundList = (await listedRefunds.json()) as { refunds: Array<{ cardNumber: string }> };
     expect(refundList.refunds[0]?.cardNumber).toBe("502229******5995");
 
     const blocked = await reverseRoute(
-      paymentPost("/api/payment/reverse", { attemptId: initiated.attemptId }, auth),
+      paymentPost("/api/v1/payment/reverse", { attemptId: initiated.attemptId }, auth),
     );
     expect(blocked.status).toBe(409);
     expect(await getPrisma().transaction.count({ where: { type: "Reverse" } })).toBe(0);
-    const stillFunded = await listWalletsRoute(sessionGet("/api/wallets", auth.session));
+    const stillFunded = await listWalletsRoute(sessionGet("/api/v1/wallets", auth.session));
     const balances = (await stillFunded.json()) as { wallets: Array<{ availableBalance: number }> };
     expect(balances.wallets[0]?.availableBalance).toBe(5000);
   });
@@ -119,7 +119,7 @@ describe("zarinpal wallet flow", () => {
   it("does not verify or credit a NOK callback", async () => {
     const auth = await register("09120000022");
     const started = await initiateRoute(
-      paymentPost("/api/payment/initiate", { amount: 1000, description: "شارژ" }, auth),
+      paymentPost("/api/v1/payment/initiate", { amount: 1000, description: "شارژ" }, auth),
     );
     const initiated = (await started.json()) as { attemptId: number };
     const attempt = await getPrisma().gatewayAttempt.findUniqueOrThrow({ where: { id: initiated.attemptId } });
@@ -135,32 +135,32 @@ describe("zarinpal wallet flow", () => {
   it("rolls back reverse when the gateway rejects, then reverses on success", async () => {
     const auth = await register("09120000023");
     const started = await initiateRoute(
-      paymentPost("/api/payment/initiate", { amount: 2000, description: "شارژ" }, auth),
+      paymentPost("/api/v1/payment/initiate", { amount: 2000, description: "شارژ" }, auth),
     );
     const initiated = (await started.json()) as { attemptId: number };
     const attempt = await getPrisma().gatewayAttempt.findUniqueOrThrow({ where: { id: initiated.attemptId } });
     await callbackRoute(callbackRequest("OK", attempt.id, attempt.amount, attempt.salt ?? "", AUTHORITY));
 
     gateway = sandboxGateway({ reverse: { data: {}, errors: { code: -60 } } });
-    const rejected = await reverseRoute(paymentPost("/api/payment/reverse", { attemptId: initiated.attemptId }, auth));
+    const rejected = await reverseRoute(paymentPost("/api/v1/payment/reverse", { attemptId: initiated.attemptId }, auth));
     expect(rejected.status).toBe(502);
     expect(await getPrisma().transaction.count({ where: { type: "Reverse" } })).toBe(0);
 
     gateway = sandboxGateway({ reverse: { data: { code: 100, message: "Reversed" }, errors: [] } });
-    const reversed = await reverseRoute(paymentPost("/api/payment/reverse", { attemptId: initiated.attemptId }, auth));
+    const reversed = await reverseRoute(paymentPost("/api/v1/payment/reverse", { attemptId: initiated.attemptId }, auth));
     expect(reversed.status).toBe(200);
-    const wallets = await listWalletsRoute(sessionGet("/api/wallets", auth.session));
+    const wallets = await listWalletsRoute(sessionGet("/api/v1/wallets", auth.session));
     const listed = (await wallets.json()) as { wallets: Array<{ availableBalance: number }> };
     expect(listed.wallets[0]?.availableBalance).toBe(0);
   });
 
   it("forbids charging a wallet the caller does not own", async () => {
     const owner = await register("09120000024");
-    const created = await createWalletRoute(paymentPost("/api/wallets", { displayName: "Owner" }, owner));
+    const created = await createWalletRoute(paymentPost("/api/v1/wallets", { displayName: "Owner" }, owner));
     const wallet = (await created.json()) as { teamId: number };
     const other = await register("09120000025");
     const forbidden = await initiateRoute(
-      paymentPost("/api/payment/initiate", { amount: 1000, description: "شارژ", teamId: wallet.teamId }, other),
+      paymentPost("/api/v1/payment/initiate", { amount: 1000, description: "شارژ", teamId: wallet.teamId }, other),
     );
     expect(forbidden.status).toBe(403);
     const body = (await forbidden.json()) as { error: { code: string } };
@@ -170,10 +170,10 @@ describe("zarinpal wallet flow", () => {
   it("recovers a paid attempt that missed the callback", async () => {
     const auth = await register("09120000026");
     const started = await initiateRoute(
-      paymentPost("/api/payment/initiate", { amount: 3000, description: "شارژ" }, auth),
+      paymentPost("/api/v1/payment/initiate", { amount: 3000, description: "شارژ" }, auth),
     );
     const initiated = (await started.json()) as { attemptId: number };
-    const recovered = await recoverRoute(paymentPost("/api/payment/recover", { authority: AUTHORITY }, auth));
+    const recovered = await recoverRoute(paymentPost("/api/v1/payment/recover", { authority: AUTHORITY }, auth));
     expect(recovered.status).toBe(200);
     const body = (await recovered.json()) as { recovered: number };
     expect(body.recovered).toBe(1);
@@ -183,7 +183,7 @@ describe("zarinpal wallet flow", () => {
   it("retries a reverse that timed out and rejects refunds after reverse", async () => {
     const auth = await register("09120000027");
     const started = await initiateRoute(
-      paymentPost("/api/payment/initiate", { amount: 4000, description: "شارژ" }, auth),
+      paymentPost("/api/v1/payment/initiate", { amount: 4000, description: "شارژ" }, auth),
     );
     const initiated = (await started.json()) as { attemptId: number };
     const attempt = await getPrisma().gatewayAttempt.findUniqueOrThrow({ where: { id: initiated.attemptId } });
@@ -200,13 +200,13 @@ describe("zarinpal wallet flow", () => {
       }
       return sandboxGateway()(url, body);
     };
-    const pending = await reverseRoute(paymentPost("/api/payment/reverse", { attemptId: initiated.attemptId }, auth));
+    const pending = await reverseRoute(paymentPost("/api/v1/payment/reverse", { attemptId: initiated.attemptId }, auth));
     expect(pending.status).toBe(200);
     expect((await getPrisma().gatewayAttempt.findUniqueOrThrow({ where: { id: initiated.attemptId } })).status).toBe(
       "reverse_pending",
     );
 
-    const retried = await reverseRoute(paymentPost("/api/payment/reverse", { attemptId: initiated.attemptId }, auth));
+    const retried = await reverseRoute(paymentPost("/api/v1/payment/reverse", { attemptId: initiated.attemptId }, auth));
     expect(retried.status).toBe(200);
     expect((await getPrisma().gatewayAttempt.findUniqueOrThrow({ where: { id: initiated.attemptId } })).status).toBe(
       "reversed",
@@ -216,7 +216,7 @@ describe("zarinpal wallet flow", () => {
       where: { gatewayAttemptId: initiated.attemptId, type: "GatewayCredit" },
     });
     const refunded = await createRefundRoute(
-      paymentPost("/api/payment/refunds", { transactionId: credit.id, cardNumber: "5022291234565995" }, auth),
+      paymentPost("/api/v1/payment/refunds", { transactionId: credit.id, cardNumber: "5022291234565995" }, auth),
     );
     expect(refunded.status).toBe(409);
   });
@@ -224,7 +224,7 @@ describe("zarinpal wallet flow", () => {
   it("does not finish a pending reverse while a card refund is still open", async () => {
     const auth = await register("09120000029");
     const started = await initiateRoute(
-      paymentPost("/api/payment/initiate", { amount: 4000, description: "شارژ" }, auth),
+      paymentPost("/api/v1/payment/initiate", { amount: 4000, description: "شارژ" }, auth),
     );
     const initiated = (await started.json()) as { attemptId: number };
     const attempt = await getPrisma().gatewayAttempt.findUniqueOrThrow({ where: { id: initiated.attemptId } });
@@ -235,7 +235,7 @@ describe("zarinpal wallet flow", () => {
       }
       return sandboxGateway()(url, body);
     };
-    const pending = await reverseRoute(paymentPost("/api/payment/reverse", { attemptId: initiated.attemptId }, auth));
+    const pending = await reverseRoute(paymentPost("/api/v1/payment/reverse", { attemptId: initiated.attemptId }, auth));
     expect(pending.status).toBe(200);
     const credit = await getPrisma().transaction.findFirstOrThrow({
       where: { gatewayAttemptId: initiated.attemptId, type: "GatewayCredit" },
@@ -251,7 +251,7 @@ describe("zarinpal wallet flow", () => {
       },
     });
     gatewayCalls.length = 0;
-    const retried = await reverseRoute(paymentPost("/api/payment/reverse", { attemptId: initiated.attemptId }, auth));
+    const retried = await reverseRoute(paymentPost("/api/v1/payment/reverse", { attemptId: initiated.attemptId }, auth));
     expect(retried.status).toBe(409);
     expect(gatewayCalls.some((url) => url.endsWith("reverse.json"))).toBe(false);
     expect((await getPrisma().gatewayAttempt.findUniqueOrThrow({ where: { id: initiated.attemptId } })).status).toBe(
@@ -262,7 +262,7 @@ describe("zarinpal wallet flow", () => {
   it("stores the 16-digit refund PAN and masks it in the response", async () => {
     const auth = await register("09120000028");
     const started = await initiateRoute(
-      paymentPost("/api/payment/initiate", { amount: 1000, description: "شارژ" }, auth),
+      paymentPost("/api/v1/payment/initiate", { amount: 1000, description: "شارژ" }, auth),
     );
     const initiated = (await started.json()) as { attemptId: number };
     const attempt = await getPrisma().gatewayAttempt.findUniqueOrThrow({ where: { id: initiated.attemptId } });
@@ -271,7 +271,7 @@ describe("zarinpal wallet flow", () => {
       where: { gatewayAttemptId: initiated.attemptId, type: "GatewayCredit" },
     });
     const refunded = await createRefundRoute(
-      paymentPost("/api/payment/refunds", { transactionId: credit.id, cardNumber: "5022291234565995" }, auth),
+      paymentPost("/api/v1/payment/refunds", { transactionId: credit.id, cardNumber: "5022291234565995" }, auth),
     );
     expect(refunded.status).toBe(201);
     const stored = await getPrisma().refundRequest.findFirstOrThrow({ where: { transactionId: credit.id } });
@@ -327,7 +327,7 @@ function sessionGet(path: string, sessionId: string): Request {
 
 function callbackRequest(status: string, attemptId: number, amount: bigint, salt: string, authority: string): Request {
   const sig = signCallbackHmac(HMAC_SECRET, callbackHmacPayload({ attemptId, amount, salt }));
-  const url = `${ORIGIN}/api/payment/callback/zarinpal?sig=${encodeURIComponent(sig)}&Authority=${authority}&Status=${status}`;
+  const url = `${ORIGIN}/api/v1/payment/callback/zarinpal?sig=${encodeURIComponent(sig)}&Authority=${authority}&Status=${status}`;
   return new Request(url, { method: "GET" });
 }
 
@@ -337,7 +337,7 @@ type AuthCookies = { session: string; csrf: string };
 async function register(phone: string): Promise<AuthCookies> {
   await getRedis().del(`otp:cooldown:${phone}`);
   await requestOtpRoute(
-    new Request(`${ORIGIN}/api/auth/otp/request`, {
+    new Request(`${ORIGIN}/api/v1/auth/otp/request`, {
       method: "POST",
       headers: { "content-type": "application/json", origin: ORIGIN },
       body: JSON.stringify({ phoneNumber: phone }),
@@ -345,7 +345,7 @@ async function register(phone: string): Promise<AuthCookies> {
   );
   const code = sms.codes.at(-1) ?? "";
   const verified = await verifyOtpRoute(
-    new Request(`${ORIGIN}/api/auth/otp/verify`, {
+    new Request(`${ORIGIN}/api/v1/auth/otp/verify`, {
       method: "POST",
       headers: { "content-type": "application/json", origin: ORIGIN },
       body: JSON.stringify({ phoneNumber: phone, code }),
