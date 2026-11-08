@@ -21,6 +21,7 @@ export async function POST(request: Request) {
     code: readString(begun.data.body, "code"),
     purpose,
     client: begun.data.client,
+    referralToken: readString(begun.data.body, "token"),
   });
   if (!result.ok) {
     return failureResponse(result);

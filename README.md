@@ -25,6 +25,7 @@ Postgres 18.4 روی پورت `5433` و Redis 8 روی پورت `6379` با `doc
 - `POST /api/auth/otp/verify`
 - `POST /api/auth/password/set`
 - `POST /api/auth/password/reset`
+- `GET /api/auth/token`
 - `GET /api/wallets`
 - `POST /api/wallets`
 - `GET /api/wallets/{teamId}/transactions`

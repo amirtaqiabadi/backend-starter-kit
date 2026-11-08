@@ -10,6 +10,7 @@ describe("openapi", () => {
       "/api/auth/password/login",
       "/api/auth/password/reset",
       "/api/auth/password/set",
+      "/api/auth/token",
       "/api/payment/callback/zarinpal",
       "/api/payment/initiate",
       "/api/payment/recover",

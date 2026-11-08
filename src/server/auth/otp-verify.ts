@@ -21,6 +21,7 @@ export async function verifyOtpLogin(input: {
   code: string;
   purpose: OtpPurpose;
   client: ClientMeta;
+  referralToken?: string;
 }): Promise<AuthResult<OtpVerifyData>> {
   const phone = normalizePhone(input.phoneNumber);
   const code = normalizeOtpCode(input.code);
@@ -54,7 +55,7 @@ export async function verifyOtpLogin(input: {
   if (verdict.status === "EXPIRED") {
     return fail({ status: 401, code: "OTP_EXPIRED", message: messages.otpExpired });
   }
-  const user = await findOrCreateUserByPhone(phone);
+  const user = await findOrCreateUserByPhone(phone, input.referralToken ?? null);
   await touchLastLogin(user.id);
   const sessionId = await createSession({
     userId: user.id,

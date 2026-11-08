@@ -10,6 +10,8 @@ datasource db {
 model User {
   id            Int       @id @default(autoincrement())
   phoneNumber   String    @unique @map("phone_number") @db.Char(11)
+  token         String    @unique @db.Char(5)
+  referredById  Int?      @map("referred_by_id")
   name          String?
   passwordHash  String?   @map("password_hash")
   passwordSetAt DateTime? @map("password_set_at")
@@ -17,11 +19,14 @@ model User {
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
+  referredBy      User?            @relation("Referrals", fields: [referredById], references: [id])
+  referrals       User[]           @relation("Referrals")
   teamMemberships TeamMember[]
   gatewayAttempts GatewayAttempt[] @relation("GatewayAttemptInitiator")
   transactions    Transaction[]    @relation("TransactionInitiator")
   refundRequests  RefundRequest[]
 
+  @@index([referredById])
   @@map("users")
 }
 
