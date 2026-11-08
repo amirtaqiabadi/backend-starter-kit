@@ -2,6 +2,9 @@
 ALTER TABLE "users" ADD COLUMN "token" CHAR(5);
 ALTER TABLE "users" ADD COLUMN "referred_by_id" INTEGER;
 
+-- Multiple NULLs are allowed, so this index can exist before tokens are filled in.
+CREATE UNIQUE INDEX "users_token_key" ON "users"("token");
+
 -- Existing accounts need a public token before the column can be required.
 DO $$
 DECLARE
@@ -22,9 +25,6 @@ BEGIN
 END $$;
 
 ALTER TABLE "users" ALTER COLUMN "token" SET NOT NULL;
-
--- CreateIndex
-CREATE UNIQUE INDEX "users_token_key" ON "users"("token");
 
 -- CreateIndex
 CREATE INDEX "users_referred_by_id_idx" ON "users"("referred_by_id");
