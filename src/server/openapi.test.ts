@@ -4,20 +4,20 @@ import { openApiDocument } from "@/server/openapi";
 describe("openapi", () => {
   it("lists every documented route", () => {
     expect(Object.keys(openApiDocument().paths).sort()).toEqual([
-      "/api/auth/identify",
-      "/api/auth/otp/request",
-      "/api/auth/otp/verify",
-      "/api/auth/password/login",
-      "/api/auth/password/reset",
-      "/api/auth/password/set",
-      "/api/auth/token",
-      "/api/payment/callback/zarinpal",
-      "/api/payment/initiate",
-      "/api/payment/recover",
-      "/api/payment/refunds",
-      "/api/payment/reverse",
-      "/api/wallets",
-      "/api/wallets/{teamId}/transactions",
+      "/api/v1/auth/identify",
+      "/api/v1/auth/otp/request",
+      "/api/v1/auth/otp/verify",
+      "/api/v1/auth/password/login",
+      "/api/v1/auth/password/reset",
+      "/api/v1/auth/password/set",
+      "/api/v1/auth/token",
+      "/api/v1/payment/callback/zarinpal",
+      "/api/v1/payment/initiate",
+      "/api/v1/payment/recover",
+      "/api/v1/payment/refunds",
+      "/api/v1/payment/reverse",
+      "/api/v1/wallets",
+      "/api/v1/wallets/{teamId}/transactions",
     ]);
   });
 });

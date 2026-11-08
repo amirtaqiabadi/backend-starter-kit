@@ -19,22 +19,22 @@ Postgres 18.4 روی پورت `5433` و Redis 8 روی پورت `6379` با `doc
 
 ## مسیرها
 
-- `POST /api/auth/identify`
-- `POST /api/auth/password/login`
-- `POST /api/auth/otp/request`
-- `POST /api/auth/otp/verify`
-- `POST /api/auth/password/set`
-- `POST /api/auth/password/reset`
-- `GET /api/auth/token`
-- `GET /api/wallets`
-- `POST /api/wallets`
-- `GET /api/wallets/{teamId}/transactions`
-- `POST /api/payment/initiate`
-- `GET /api/payment/callback/zarinpal`
-- `POST /api/payment/reverse`
-- `POST /api/payment/refunds`
-- `GET /api/payment/refunds`
-- `POST /api/payment/recover`
+- `POST /api/v1/auth/identify`
+- `POST /api/v1/auth/password/login`
+- `POST /api/v1/auth/otp/request`
+- `POST /api/v1/auth/otp/verify`
+- `POST /api/v1/auth/password/set`
+- `POST /api/v1/auth/password/reset`
+- `GET /api/v1/auth/token`
+- `GET /api/v1/wallets`
+- `POST /api/v1/wallets`
+- `GET /api/v1/wallets/{teamId}/transactions`
+- `POST /api/v1/payment/initiate`
+- `GET /api/v1/payment/callback/zarinpal`
+- `POST /api/v1/payment/reverse`
+- `POST /api/v1/payment/refunds`
+- `GET /api/v1/payment/refunds`
+- `POST /api/v1/payment/recover`
 
 نشست موفق در کوکی `HttpOnly` به نام `session` قرار می‌گیرد. درخواست‌های `POST` باید هدر `Origin` هم‌مبدأ با `Host` داشته باشند. POSTهای کیف علاوه بر Origin به کوکی `csrf-token` و هدر `x-csrf-token` نیاز دارند. کال‌بک زرین‌پال از CSRF معاف است و با HMAC چک می‌شود.
 

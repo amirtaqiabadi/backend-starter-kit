@@ -4,7 +4,7 @@ Use this guide to build the phone login screens against this API. Interactive re
 
 There is no signup endpoint. The first successful OTP for a phone creates the account and signs the user in.
 
-There is no logout endpoint and no “current user” endpoint. After login the browser holds an `HttpOnly` session cookie. Treat `GET /api/wallets` returning `401` as signed out. Wallet calls are documented in [frontend-wallet.md](./frontend-wallet.md).
+There is no logout endpoint and no “current user” endpoint. After login the browser holds an `HttpOnly` session cookie. Treat `GET /api/v1/wallets` returning `401` as signed out. Wallet calls are documented in [frontend-wallet.md](./frontend-wallet.md).
 
 ## Transport
 
@@ -36,21 +36,21 @@ Rules:
 
 ```mermaid
 flowchart TD
-  phone[Phone screen] --> identify["POST /api/auth/identify"]
+  phone[Phone screen] --> identify["POST /api/v1/auth/identify"]
   identify -->|nextStep PASSWORD| password[Password screen]
-  identify -->|nextStep OTP| request["POST /api/auth/otp/request"]
-  password -->|submit| login["POST /api/auth/password/login"]
+  identify -->|nextStep OTP| request["POST /api/v1/auth/otp/request"]
+  password -->|submit| login["POST /api/v1/auth/password/login"]
   password -->|forgot password| request
   request --> code[5-digit code screen]
-  code -->|purpose LOGIN| verifyLogin["POST /api/auth/otp/verify"]
-  code -->|purpose RESET_PASSWORD| verifyReset["POST /api/auth/otp/verify"]
+  code -->|purpose LOGIN| verifyLogin["POST /api/v1/auth/otp/verify"]
+  code -->|purpose RESET_PASSWORD| verifyReset["POST /api/v1/auth/otp/verify"]
   login --> done[Follow redirectTo]
   verifyLogin -->|hasPassword false| optionalSet[Optional set-password screen]
   verifyLogin -->|hasPassword true| done
-  optionalSet --> set["POST /api/auth/password/set"]
+  optionalSet --> set["POST /api/v1/auth/password/set"]
   set --> done
   verifyReset --> reset[New-password screen]
-  reset --> resetPost["POST /api/auth/password/reset"]
+  reset --> resetPost["POST /api/v1/auth/password/reset"]
   resetPost --> done
 ```
 
@@ -86,7 +86,7 @@ Optional on password login and OTP verify. It must be one relative path with a s
 
 ### 1. Choose the next screen
 
-`POST /api/auth/identify`
+`POST /api/v1/auth/identify`
 
 ```json
 { "phoneNumber": "09123456789" }
@@ -102,7 +102,7 @@ Optional on password login and OTP verify. It must be one relative path with a s
 
 ### 2. Password login
 
-`POST /api/auth/password/login`
+`POST /api/v1/auth/password/login`
 
 ```json
 {
@@ -126,7 +126,7 @@ Five failures for one phone inside 15 minutes return `429 LOCKED`. Twenty login 
 
 ### 3. Request a code
 
-`POST /api/auth/otp/request`
+`POST /api/v1/auth/otp/request`
 
 ```json
 { "phoneNumber": "09123456789" }
@@ -146,7 +146,7 @@ Limits, all defaults: 5 SMS per phone per hour, 10 per phone per day, 20 per IP 
 
 ### 4. Verify the code
 
-`POST /api/auth/otp/verify`
+`POST /api/v1/auth/otp/verify`
 
 Login:
 
@@ -180,7 +180,7 @@ Wrong code: `401 OTP_MISMATCH` plus `attemptsRemaining` (integer). Last wrong tr
 
 ### 5. Read the signed-in user’s token
 
-`GET /api/auth/token`
+`GET /api/v1/auth/token`
 
 Requires the session cookie. No CSRF header.
 
@@ -194,7 +194,7 @@ Requires the session cookie. No CSRF header.
 
 ### 6. Set a password once
 
-`POST /api/auth/password/set`
+`POST /api/v1/auth/password/set`
 
 Requires the session cookie from step 4. No CSRF header.
 
@@ -212,7 +212,7 @@ Only for an account that has no password. If one already exists: `409 PASSWORD_E
 
 ### 7. Replace the password
 
-`POST /api/auth/password/reset`
+`POST /api/v1/auth/password/reset`
 
 Requires the session from a `RESET_PASSWORD` verify. No CSRF header.
 
