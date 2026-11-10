@@ -308,10 +308,10 @@ Newest first. `status` is `pending`, `processing`, `paid`, `rejected`, or `faile
 { "authority": "A00000000000000000000000000123456789" }
 ```
 
-`authority` is optional.
+`authority` is optional. To omit it, send `{}`. A request with no body is `400 INVALID_BODY`.
 
 - With `authority`: verify that one payment if this user owns it. Unknown authority is `404 ATTEMPT_NOT_FOUND`. Someone else’s payment is `403 TEAM_FORBIDDEN`.
-- Without `authority`: the server asks the gateway for unverified payments and verifies the ones this user owns. Gateway list failure is `503 GATEWAY_UNAVAILABLE`.
+- Without `authority`: send `{}`. The server asks the gateway for unverified payments and verifies the ones this user owns. Gateway list failure is `503 GATEWAY_UNAVAILABLE`.
 
 `200`
 
@@ -319,7 +319,7 @@ Newest first. `status` is `pending`, `processing`, `paid`, `rejected`, or `faile
 { "recovered": 1 }
 ```
 
-`recovered` is how many attempts were newly confirmed. `0` is a successful call that found nothing to credit. Reload wallets afterward. The frontend usually does not have the authority; the no-body form is the one to put on the failure page when `code` is `GATEWAY_UNAVAILABLE`.
+`recovered` is how many attempts were newly confirmed. `0` is a successful call that found nothing to credit. Reload wallets afterward. The frontend usually does not have the authority. On the failure page, when `code` is `GATEWAY_UNAVAILABLE`, send `{}`.
 
 ## Errors
 
