@@ -3,11 +3,16 @@ export type ClientMeta = {
   userAgent: string;
 };
 
-/** Why: state-changing auth calls must come from this site, not another origin. */
+const DEV_FRONTEND_ORIGIN = "http://localhost:3001";
+
+/** Why: state-changing auth calls must come from this site, or the configured frontend origin. */
 export function isSameOrigin(request: Request): boolean {
   const origin = request.headers.get("origin");
   if (!origin) {
     return false;
+  }
+  if (isAllowedApiOrigin(origin)) {
+    return true;
   }
   let originHost = "";
   try {
@@ -17,6 +22,42 @@ export function isSameOrigin(request: Request): boolean {
   }
   const requestHost = request.headers.get("host") ?? requestHostFromUrl(request.url);
   return originHost === requestHost;
+}
+
+/** Why: the browser on port 3001 calls this API on port 3000 and must be named explicitly. */
+export function isAllowedApiOrigin(origin: string | null): boolean {
+  if (!origin) {
+    return false;
+  }
+  return allowedApiOrigins().includes(origin);
+}
+
+/** Why: local dev defaults to the frontend port; production lists origins only from the environment. */
+export function allowedApiOrigins(env: NodeJS.ProcessEnv = process.env): string[] {
+  const configured = env.FRONTEND_ORIGINS?.split(",")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+  if (configured && configured.length > 0) {
+    return configured;
+  }
+  if (env.NODE_ENV === "production") {
+    return [];
+  }
+  return [DEV_FRONTEND_ORIGIN];
+}
+
+/** Why: credentialed browser calls from the frontend need an explicit allow-origin, never `*`. */
+export function corsHeaders(origin: string | null): Record<string, string> {
+  if (!isAllowedApiOrigin(origin) || !origin) {
+    return {};
+  }
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "content-type, x-csrf-token, x-request-id",
+    Vary: "Origin",
+  };
 }
 
 /** Why: rate limits need a stable client address even when the platform omits a proxy header. */
