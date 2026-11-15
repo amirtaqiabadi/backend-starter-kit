@@ -4,10 +4,35 @@ API احراز هویت با شماره موبایل ایران، با کد یک
 
 ## راه‌اندازی
 
+برای استقرار نسخهٔ staging برنامهٔ `backend-starter-kit` روی لیارا و اتصال فرانت موجود، [راهنمای لیارا](docs/liara.md) را دنبال کنید.
+
+### اجرای کامل با Docker
+
 ```bash
+cp .env.example .env
+docker compose up -d --build --wait
+```
+
+این دستور به Docker و Compose نیاز دارد. اگر Compose روی سیستم شما به‌صورت دستور مستقل نصب شده است، به‌جای `docker compose` از `docker-compose` استفاده کنید.
+
+اگر از قبل `.env` دارید، آن را نگه دارید. پیش از اجرای واقعی، مقدارهای `OTP_PEPPER`، `PAYMENT_CALLBACK_HMAC_SECRET` و `PAYMENT_CARD_ENCRYPTION_KEY` را با رشته‌های تصادفی مستقل حداقل ۳۲ کاراکتری جایگزین کنید و تنظیمات پیامک و پرداخت را تکمیل کنید. برای ساخت هر مقدار می‌توانید `openssl rand -hex 32` اجرا کنید.
+
+اپلیکیشن با حالت production روی [http://localhost:3000/docs](http://localhost:3000/docs) اجرا می‌شود. Compose ابتدا منتظر آماده‌شدن Postgres می‌ماند، migrationهای Prisma را اعمال می‌کند و سپس اپلیکیشن را با Redis آماده اجرا می‌کند. آدرس اتصال دیتابیس و Redis داخل کانتینرها خودکار تنظیم می‌شود؛ سایر تنظیمات هنگام اجرا از `.env` خوانده می‌شوند. فایل‌های `.env` وارد ایمیج نمی‌شوند.
+
+```bash
+docker compose logs -f app migrate
+docker compose down
+```
+
+داده‌های Postgres در volume ماندگار هستند؛ `docker compose down` آن‌ها را حذف نمی‌کند. Redis مانند تنظیمات قبلی ماندگار نیست و با بازسازی کانتینر، نشست‌ها و کدهای موقت آن پاک می‌شوند. پورت‌ها فقط روی localhost منتشر شده‌اند. برای استقرار روی سرور، reverse proxy و HTTPS را تنظیم کنید، آدرس‌های عمومی پرداخت و `FRONTEND_ORIGINS` را در `.env` قرار دهید و `TRUSTED_PROXY_COUNT` را متناسب با تعداد پراکسی‌های مورد اعتماد تنظیم کنید. کوکی نشست در حالت production به HTTPS نیاز دارد.
+
+### توسعهٔ محلی
+
+```bash
+cp .env.example .env
 npm install
 npm run db:up
-npx prisma migrate deploy
+npx prisma migrate deploy --config prisma7.config.ts
 npm run dev
 ```
 

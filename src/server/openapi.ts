@@ -64,7 +64,7 @@ export function openApiDocument() {
           tags: ["auth"],
           summary: "درخواست کد پیامکی",
           description:
-            "devCode فقط وقتی برمی‌گردد که NODE_ENV غیر از production باشد و SMS_DEV_LOG=true.",
+            "در staging با APP_ENV=staging و OTP_EXPOSE_CODE=true کد در devCode برمی‌گردد، حتی با NODE_ENV=production. در توسعهٔ محلی نیز با NODE_ENV غیر از production و SMS_DEV_LOG=true نمایش داده می‌شود.",
           requestBody: jsonBody({
             required: ["phoneNumber"],
             properties: { phoneNumber: phoneSchema },
