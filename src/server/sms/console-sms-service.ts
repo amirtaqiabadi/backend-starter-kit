@@ -6,7 +6,7 @@ import type { SmsService } from "@/server/sms/sms-service";
 export class ConsoleSmsService implements SmsService {
   async sendOtp(phoneNumber: string, code: string): Promise<void> {
     const phone = maskPhone(phoneNumber);
-    if (!canRevealOtp()) {
+    if (process.env.NODE_ENV === "production" || !canRevealOtp()) {
       console.info("otp_sent", { phone });
       return;
     }

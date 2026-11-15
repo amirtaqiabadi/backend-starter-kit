@@ -6,7 +6,7 @@ import { failureResponse } from "@/server/auth/response";
 import { readString } from "@/server/http";
 import { getSmsService } from "@/server/sms";
 
-/** Why: requesting a code is the only place an SMS is sent, and the code stays off the response in production. */
+/** Why: staging may explicitly return a test code while live deployments omit it. */
 export async function POST(request: Request) {
   const begun = await beginAuthPost(request);
   if (!begun.ok) {
@@ -21,8 +21,11 @@ export async function POST(request: Request) {
   if (!result.ok) {
     return failureResponse(result);
   }
-  return NextResponse.json({
-    cooldownSeconds: result.data.cooldownSeconds,
-    ...(canRevealOtp() ? { devCode: result.data.code } : {}),
-  });
+  return NextResponse.json(
+    {
+      cooldownSeconds: result.data.cooldownSeconds,
+      ...(canRevealOtp() ? { devCode: result.data.code } : {}),
+    },
+    { headers: { "Cache-Control": "no-store" } },
+  );
 }

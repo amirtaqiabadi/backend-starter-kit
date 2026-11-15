@@ -1,0 +1,15 @@
+.git
+.env
+.env.*
+node_modules
+.next
+generated
+.codex
+.agents
+.cursor
+coverage
+out
+build
+*.tsbuildinfo
+*.log
+.DS_Store

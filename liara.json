@@ -1,0 +1,11 @@
+{
+  "app": "backend-starter-kit",
+  "platform": "docker",
+  "port": 3000,
+  "team-id": "6af1f3327b73964d457bf0d8",
+  "build": {
+    "location": "germany",
+    "dockerfile": "Dockerfile"
+  },
+  "disks": []
+}

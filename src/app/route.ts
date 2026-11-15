@@ -1,4 +1,7 @@
-/** Why: the service has no screen of its own, so the root address opens the API docs. */
-export function GET(request: Request) {
-  return Response.redirect(new URL("/docs", request.url), 302);
+/** Why: a relative redirect preserves the public domain behind Liara's proxy. */
+export function GET() {
+  return new Response(null, {
+    status: 302,
+    headers: { Location: "/docs", "Cache-Control": "no-store" },
+  });
 }
