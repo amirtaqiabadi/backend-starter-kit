@@ -10,6 +10,8 @@ export const messages = {
   otpExhausted: "تعداد تلاش‌های این کد تمام شد. کد جدید بگیرید.",
   otpCooldown: "برای دریافت کد جدید کمی صبر کنید.",
   smsFailed: "ارسال پیامک انجام نشد. دوباره تلاش کنید.",
+  voiceFailed: "ارسال کد صوتی انجام نشد. دوباره تلاش کنید.",
+  invalidOtpChannel: "روش ارسال کد باید sms یا voice باشد.",
   unauthorized: "برای ادامه باید وارد شوید.",
   passwordAlreadySet: "رمز عبور قبلاً تنظیم شده است.",
   resetNotAllowed: "اجازهٔ تغییر رمز منقضی شده است. دوباره کد تأیید بگیرید.",

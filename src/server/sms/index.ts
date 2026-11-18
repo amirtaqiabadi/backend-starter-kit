@@ -8,7 +8,7 @@ let current = createSmsService();
 
 /** Why: SMS_PROVIDER is the only switch between the console sender and a real gateway. */
 export function createSmsService(provider = process.env.SMS_PROVIDER ?? "console"): SmsService {
-  if (provider === "vendor") {
+  if (provider === "vendor" || provider === "ippanel") {
     return new VendorSmsService();
   }
   return new ConsoleSmsService();

@@ -62,12 +62,15 @@ export function openApiDocument() {
       "/auth/otp/request": {
         post: {
           tags: ["auth"],
-          summary: "درخواست کد پیامکی",
+          summary: "درخواست کد پیامکی یا صوتی",
           description:
-            "در staging با APP_ENV=staging و OTP_EXPOSE_CODE=true کد در devCode برمی‌گردد، حتی با NODE_ENV=production. در توسعهٔ محلی نیز با NODE_ENV غیر از production و SMS_DEV_LOG=true نمایش داده می‌شود.",
+            "channel اختیاری است: sms برای پیامک و voice برای تماس صوتی؛ پیش‌فرض sms است. محدودیت‌ها و مهلت ارسال دوباره برای هر دو روش مشترک‌اند. نمایش devCode فقط با SMS_PROVIDER=console مجاز است؛ با ippanel یا vendor هرگز برنمی‌گردد. در staging با APP_ENV=staging و OTP_EXPOSE_CODE=true کد در devCode برمی‌گردد، حتی با NODE_ENV=production. در توسعهٔ محلی نیز با NODE_ENV غیر از production و SMS_DEV_LOG=true نمایش داده می‌شود.",
           requestBody: jsonBody({
             required: ["phoneNumber"],
-            properties: { phoneNumber: phoneSchema },
+            properties: {
+              phoneNumber: phoneSchema,
+              channel: { type: "string", enum: ["sms", "voice"], default: "sms" },
+            },
           }),
           responses: {
             "200": jsonResponse("مهلت ارسال دوباره", {
@@ -371,6 +374,7 @@ export function openApiDocument() {
                     "OTP_EXHAUSTED",
                     "OTP_EXPIRED",
                     "SMS_FAILED",
+                    "INVALID_OTP_CHANNEL",
                     "UNAUTHORIZED",
                     "PASSWORD_EXISTS",
                     "RESET_NOT_ALLOWED",
