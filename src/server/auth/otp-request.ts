@@ -5,7 +5,7 @@ import { assertCaptcha } from "@/server/auth/captcha";
 import { createOtpCode, otpCooldownTtl, releaseOtp, storeOtp } from "@/server/auth/otp-store";
 import { consumeOtpRequestLimits } from "@/server/auth/rate-limit";
 import { fail, type AuthResult } from "@/server/auth/result";
-import type { SmsService } from "@/server/sms/sms-service";
+import type { OtpChannel, SmsService } from "@/server/sms/sms-service";
 
 export type OtpRequestData = { cooldownSeconds: number; code: string };
 
@@ -15,6 +15,7 @@ export async function requestOtp(input: {
   ip: string;
   userAgent: string;
   sms: SmsService;
+  channel?: OtpChannel;
 }): Promise<AuthResult<OtpRequestData>> {
   const phone = normalizePhone(input.phoneNumber);
   if (!phone) {
@@ -42,10 +43,14 @@ export async function requestOtp(input: {
   const code = createOtpCode();
   await storeOtp({ phone, code });
   try {
-    await input.sms.sendOtp(phone, code);
+    await input.sms.sendOtp(phone, code, input.channel ?? "sms");
   } catch {
     await releaseOtp(phone);
-    return fail({ status: 503, code: "SMS_FAILED", message: messages.smsFailed });
+    return fail({
+      status: 503,
+      code: "SMS_FAILED",
+      message: input.channel === "voice" ? messages.voiceFailed : messages.smsFailed,
+    });
   }
   await recordAuthEvent({
     type: "OTP_REQUEST",

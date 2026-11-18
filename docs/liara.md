@@ -25,7 +25,7 @@
 | --- | --- |
 | `NODE_ENV` | `production`؛ حالت runtime برای build نسخهٔ staging |
 | `APP_ENV` | `staging` برای این محیط؛ هنگام انتشار عملیاتی `production` |
-| `OTP_EXPOSE_CODE` | `true` در staging برای دریافت کد OTP در فیلد `devCode` پاسخ درخواست کد؛ در محیط عملیاتی `false` |
+| `OTP_EXPOSE_CODE` | `true` در staging و فقط با `SMS_PROVIDER=console` برای دریافت کد OTP در فیلد `devCode` پاسخ درخواست کد؛ در محیط عملیاتی `false` |
 | `PORT` | `3000` |
 | `HOSTNAME` | `0.0.0.0` |
 | `DATABASE_URL` | رشتهٔ اتصال Postgres ساخته‌شده با نام `starter-kit`؛ با نام کاربری، رمز و تنظیم TLS سرویس |
@@ -40,12 +40,16 @@
 | `PAYMENT_CALLBACK_BASE_URL` | `https://backend-starter-kit.liara.run` |
 | `PAYMENT_SUCCESS_REDIRECT_URL` | مسیر واقعی صفحهٔ نتیجهٔ موفق در فرانت |
 | `PAYMENT_FAILURE_REDIRECT_URL` | مسیر واقعی صفحهٔ نتیجهٔ ناموفق در فرانت |
-| `SMS_PROVIDER` | `console` فقط برای آزمایش؛ ارائه‌دهندهٔ واقعی پیامک هنوز در کد پیاده‌سازی نشده است |
+| `SMS_PROVIDER` | `console` فقط برای آزمایش؛ `ippanel` برای ارسال واقعی پیامک الگویی و کد صوتی |
+| `IPPANEL_API_TOKEN` | توکن IPPanel برای ارسال واقعی، بدون پیشوند Bearer |
+| `IPPANEL_FROM_NUMBER` | شمارهٔ فرستندهٔ حساب با فرمت E.164؛ برای پیامک الزامی است |
+| `IPPANEL_PATTERN_CODE` | کد الگوی پیامک |
+| `IPPANEL_PATTERN_PARAM` | نام متغیر کد در الگو؛ پیش‌فرض `code` |
 | `SMS_DEV_LOG` | `false`؛ نمایش کد در پاسخ staging با `OTP_EXPOSE_CODE` کنترل می‌شود |
 
 سایر محدودیت‌ها و تنظیمات اختیاری در `.env.example` مشخص هستند. برای هر راز می‌توانید یک بار `openssl rand -hex 32` اجرا کنید و خروجی را مستقیماً در تنظیمات محرمانهٔ لیارا نگه دارید.
 
-در staging نیز `NODE_ENV=production` است. با `APP_ENV=staging` و `OTP_EXPOSE_CODE=true`، پاسخ موفق `POST /api/v1/auth/otp/request` علاوه بر `cooldownSeconds` فیلد `devCode` را هم دارد؛ همین کد را به endpoint تأیید OTP بفرستید. پاسخ با `Cache-Control: no-store` برمی‌گردد و کد در لاگ staging چاپ نمی‌شود. `SMS_PROVIDER=console` پیامک واقعی ارسال نمی‌کند. برای انتشار عملیاتی، `APP_ENV=production` و `OTP_EXPOSE_CODE=false` تنظیم کنید.
+در staging نیز `NODE_ENV=production` است. فقط با `SMS_PROVIDER=console` و `APP_ENV=staging` و `OTP_EXPOSE_CODE=true`، پاسخ موفق `POST /api/v1/auth/otp/request` علاوه بر `cooldownSeconds` فیلد `devCode` را هم دارد؛ همین کد را به endpoint تأیید OTP بفرستید. پاسخ با `Cache-Control: no-store` برمی‌گردد و کد در لاگ staging چاپ نمی‌شود. `SMS_PROVIDER=console` پیامک واقعی ارسال نمی‌کند. با `SMS_PROVIDER=ippanel` یا `vendor`، کد هرگز در `devCode` برنمی‌گردد، حتی اگر پرچم‌های نمایش کد فعال باشند. برای انتشار عملیاتی، `APP_ENV=production` و `OTP_EXPOSE_CODE=false` تنظیم کنید.
 
 Compose فقط برای اجرای محلی است. لیارا تنها Dockerfile را build می‌کند؛ سرویس‌های Postgres، Redis و migration در Compose به‌طور خودکار روی لیارا اجرا نمی‌شوند. بک‌اند به دیسک محلی نیازی ندارد؛ داده‌ها در سرویس‌های Postgres و Redis نگهداری می‌شوند.
 
@@ -88,4 +92,4 @@ API_ORIGIN=https://backend-starter-kit.liara.run
 
 بررسی Origin بک‌اند از قبل `FRONTEND_ORIGINS` و تطابق Origin با Host را می‌پذیرد؛ بنابراین Origin و Host حفظ‌شدهٔ فرانت با همین تنظیمات پشتیبانی می‌شوند. کوکی‌های `session` و `csrf-token` از قبل فاقد `Domain` هستند و از طریق پاسخ پراکسی به دامنهٔ فرانت تعلق می‌گیرند. کوکی‌ها در production با `Secure` ثبت می‌شوند. پراکسی فرانت باید Cookie، تمام هدرهای Set-Cookie و هدر `x-csrf-token` را منتقل کند.
 
-پس از استقرار، ورود، حفظ نشست پس از refresh و درخواست‌های `GET /api/v1/wallets` و `POST /api/v1/wallets` را از فرانت بررسی کنید. درخواست POST کیف‌پول به کوکی CSRF و هدر مطابق آن نیاز دارد. این بک‌اند در حال حاضر endpoint خروج از حساب ندارد؛ بررسی logout سروری به پیاده‌سازی آن نیاز دارد. ارسال پیامک واقعی نیز تا پیاده‌سازی `VendorSmsService` قابل تأیید نیست.
+پس از استقرار، ورود، حفظ نشست پس از refresh و درخواست‌های `GET /api/v1/wallets` و `POST /api/v1/wallets` را از فرانت بررسی کنید. درخواست POST کیف‌پول به کوکی CSRF و هدر مطابق آن نیاز دارد. این بک‌اند در حال حاضر endpoint خروج از حساب ندارد؛ بررسی logout سروری به پیاده‌سازی آن نیاز دارد. برای ارسال واقعی، `SMS_PROVIDER=ippanel` و تنظیمات IPPanel را وارد کنید. در درخواست OTP، مقدار اختیاری `channel` برابر `sms` یا `voice` است و پیش‌فرض `sms` می‌ماند.

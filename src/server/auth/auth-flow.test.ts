@@ -9,6 +9,7 @@ import { POST as setRoute } from "@/app/api/v1/auth/password/set/route";
 import { getPrisma } from "@/server/db";
 import { getRedis } from "@/server/redis";
 import { setSmsService, type SmsService } from "@/server/sms";
+import type { OtpChannel } from "@/server/sms/sms-service";
 import { findOrCreateUserByPhone } from "@/server/auth/users";
 import { deleteAllPaymentRows } from "@/server/payment/clear-tables";
 
@@ -16,14 +17,16 @@ const ORIGIN = "http://localhost:3000";
 
 class MockSms implements SmsService {
   codes: string[] = [];
+  channels: OtpChannel[] = [];
   fail = false;
 
   /** Why: tests must see the issued code without a real SMS gateway. */
-  async sendOtp(_phoneNumber: string, code: string): Promise<void> {
+  async sendOtp(_phoneNumber: string, code: string, channel: OtpChannel = "sms"): Promise<void> {
     if (this.fail) {
       throw new Error("sms failed");
     }
     this.codes.push(code);
+    this.channels.push(channel);
   }
 }
 
@@ -72,6 +75,7 @@ function sessionId(response: Response): string {
 describe("phone auth flow", () => {
   beforeEach(async () => {
     sms.codes = [];
+    sms.channels = [];
     sms.fail = false;
     setSmsService(sms);
     await getRedis().flushdb();
@@ -97,6 +101,28 @@ describe("phone auth flow", () => {
     await setPassword("09120000003", "long-password");
     const withPassword = await identify(post("/api/v1/auth/identify", { phoneNumber: "09120000003" }));
     expect(await withPassword.json()).toEqual({ nextStep: "PASSWORD" });
+  });
+
+  it("sends voice OTPs, shares cooldown with SMS, and verifies the same way", async () => {
+    const phoneNumber = "09120000019";
+    const issued = await requestOtpRoute(post("/api/v1/auth/otp/request", { phoneNumber, channel: "voice" }));
+    expect(issued.status).toBe(200);
+    expect(sms.channels).toEqual(["voice"]);
+    expect((await requestOtp(phoneNumber)).status).toBe(429);
+    const verified = await verifyOtpRoute(post("/api/v1/auth/otp/verify", { phoneNumber, code: sms.codes[0] }));
+    expect(verified.status).toBe(200);
+  });
+
+  it("releases a failed voice OTP so SMS can be requested", async () => {
+    const phoneNumber = "09120000020";
+    sms.fail = true;
+    const failed = await requestOtpRoute(post("/api/v1/auth/otp/request", { phoneNumber, channel: "voice" }));
+    expect(failed.status).toBe(503);
+    expect(await failed.json()).toMatchObject({ error: { code: "SMS_FAILED" } });
+    expect(await getRedis().exists(`otp:cooldown:${phoneNumber}`)).toBe(0);
+    sms.fail = false;
+    expect((await requestOtp(phoneNumber)).status).toBe(200);
+    expect(sms.channels).toEqual(["sms"]);
   });
 
   it("rate-limits identify", async () => {
