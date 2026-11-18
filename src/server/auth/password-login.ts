@@ -10,11 +10,11 @@ import {
 } from "@/server/auth/rate-limit";
 import { fail, type AuthResult } from "@/server/auth/result";
 import { createSession } from "@/server/auth/session";
-import { touchLastLogin } from "@/server/auth/users";
+import { touchLastLogin, readUserProfile, type UserProfile } from "@/server/auth/users";
 import type { ClientMeta } from "@/server/http";
 import { getPrisma } from "@/server/db";
 
-export type LoginData = { sessionId: string };
+export type LoginData = { sessionId: string; profile: UserProfile };
 
 /** Why: wrong password, unknown number, and a number without a password must look the same. */
 export async function loginWithPassword(input: {
@@ -58,6 +58,8 @@ export async function loginWithPassword(input: {
     return fail({ status: 401, code: "INVALID_CREDENTIALS", message: messages.genericLogin });
   }
   await clearPasswordFailures(phone);
+  const profile = await readUserProfile(user.id);
+  if (!profile) throw new Error("USER_NOT_FOUND");
   await touchLastLogin(user.id);
   const sessionId = await createSession({
     userId: user.id,
@@ -71,5 +73,5 @@ export async function loginWithPassword(input: {
     userAgent: input.client.userAgent,
     userId: user.id,
   });
-  return { ok: true, data: { sessionId } };
+  return { ok: true, data: { sessionId, profile } };
 }

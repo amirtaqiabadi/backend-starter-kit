@@ -95,7 +95,7 @@ flowchart TD
   failure --> recover["POST /api/v1/payment/recover"]
   list --> history["GET /api/v1/wallets/{teamId}/transactions"]
   history --> reverse["POST /api/v1/payment/reverse"]
-  history --> refund["POST /api/v1/payment/refunds"]
+  list --> refund["POST /api/v1/payment/refunds"]
   list --> refunds["GET /api/v1/payment/refunds?teamId="]
 ```
 
@@ -172,7 +172,7 @@ Limits: 10 initiates per user and 20 per IP inside 10 minutes (`429 RATE_LIMITED
 
 `GET /api/v1/wallets/{teamId}/transactions`
 
-`teamId` is a positive integer. A bad path segment is `400 INVALID_BODY`. A wallet the caller does not own is `403 TEAM_FORBIDDEN`.
+`teamId` is a positive integer. A bad path segment is `400 INVALID_BODY`. A wallet the caller does not own is `403 TEAM_FORBIDDEN`. Use `?page=1&limit=20` to paginate. Both are positive integers; defaults are 1 and 20, and the maximum limit is 100. Invalid values return `400 INVALID_PAGINATION`.
 
 `200`
 
@@ -188,9 +188,12 @@ Limits: 10 initiates per user and 20 per IP inside 10 minutes (`429 RATE_LIMITED
       "gatewayAttemptId": 18,
       "createdAt": "2026-11-07T12:00:00.000Z"
     }
-  ]
+  ],
+  "pagination": { "page": 1, "limit": 20, "hasNextPage": false }
 }
 ```
+
+Use `hasNextPage` to decide whether to request the next page. Pages beyond the end return an empty array. New transactions inserted while browsing can shift offset-based pages; refresh from page 1 for a current view. Equal timestamps are ordered by descending id.
 
 Newest first. `amount` is a signed integer in rials: credits are positive, a reverse is negative. `createdAt` is ISO-8601. `gatewayAttemptId` is `null` when the row is not tied to a gateway attempt.
 
@@ -198,10 +201,11 @@ Types you will see from this API’s flows:
 
 | `type` | Meaning |
 | --- | --- |
-| `GatewayCredit` | Successful top-up. This is the row you reverse or refund. |
+| `GatewayCredit` | Successful top-up. Use this row to reverse the gateway payment. |
 | `Reverse` | Gateway reversal. Negative `amount`. |
+| `Refund` | Reserved amount for a manual refund. Negative `amount`. |
 
-Other ledger types can appear if data was written outside these routes (`Deposit`, `Refund`, and so on). Render unknown types with the raw `type` and the signed `amount`; do not drop the row.
+Other ledger types can appear if data was written outside these routes (`Deposit` and so on). Render unknown types with the raw `type` and the signed `amount`; do not drop the row.
 
 Format rials in the UI. Dividing by 10 for tomans is a display choice; send the API the rial integer.
 
@@ -225,17 +229,17 @@ Use the `gatewayAttemptId` from the `GatewayCredit` row, which is the same id as
 
 This is allowed only for a successful gateway credit, only for an owner, and only within **30 minutes** of that credit (`409 REVERSE_WINDOW_EXPIRED` after that). The balance must still cover the full amount (`409 INSUFFICIENT_BALANCE`).
 
-If the gateway does not answer, the API still returns `200` and the balance is already reduced. The attempt is waiting on the gateway. Calling reverse again with the same `attemptId` is safe and does not debit twice. Do not also start a card refund.
+If the gateway does not answer, the API still returns `200` and the balance is already reduced. The attempt is waiting on the gateway. Calling reverse again with the same `attemptId` is safe and does not debit twice.
 
 A `502 GATEWAY_REJECTED` means the gateway refused. Refresh history before offering the button again.
 
-Reverse and card refund are mutually exclusive for one credit. An open refund (anything except `rejected` or `failed`) makes reverse return `409 REVERSE_NOT_ALLOWED`.
+Refund requests reduce available balance, which may leave insufficient balance for a reverse.
 
 | Status | Code | UI |
 | --- | --- | --- |
 | 400 | `INVALID_BODY` | `attemptId` missing or not a positive integer. |
 | 404 | `ATTEMPT_NOT_FOUND` | Unknown attempt. |
-| 409 | `REVERSE_NOT_ALLOWED` | Not a successful credit, already reversing, or a card refund is open. |
+| 409 | `REVERSE_NOT_ALLOWED` | Not an eligible successful credit. |
 | 409 | `REVERSE_WINDOW_EXPIRED` | Older than 30 minutes. Offer card refund instead. |
 | 409 | `ALREADY_REVERSED` | Hide the reverse button. |
 | 409 | `INSUFFICIENT_BALANCE` | The wallet no longer holds the full credit. |
@@ -245,16 +249,17 @@ Reverse and card refund are mutually exclusive for one credit. An open refund (a
 
 `POST /api/v1/payment/refunds`
 
-This does **not** call the gateway and does **not** change the balance. It stores a manual payout request for a later operator. Use it when reverse is no longer available.
+This creates a manual payout request and immediately reserves its amount by appending a `Refund` debit to the ledger. The requested amount must be covered by available balance; gateway credits and reverse status are not checked.
 
 ```json
 {
-  "transactionId": 91,
+  "teamId": 4,
+  "amount": 50000,
   "cardNumber": "5022291234565995"
 }
 ```
 
-`transactionId` is the ledger row `id` of a `GatewayCredit`, not the `attemptId`. `cardNumber` must be 16 digits. Spaces and Persian or Arabic digits are fine; other characters are stripped. No Luhn check. Anything that is not 16 digits is `400 CARD_INVALID`.
+`teamId` identifies the wallet and `amount` is a positive safe integer in rials. `cardNumber` must be 16 digits. Spaces and Persian or Arabic digits are fine; other characters are stripped. No Luhn check. Anything that is not 16 digits is `400 CARD_INVALID`.
 
 `201`
 
@@ -272,7 +277,7 @@ This does **not** call the gateway and does **not** change the balance. It store
 
 The response card is masked: first 6, six stars, last 4. Never expect the full PAN back.
 
-One request per ledger row. A second one is `409 REFUND_EXISTS`. A row that is not a successful gateway credit, or a credit that already has a reverse, is `409 REFUND_NOT_ALLOWED`.
+The returned `transactionId` identifies the new refund debit, not a gateway credit. Multiple requests are allowed while sufficient available balance remains. Insufficient funds return `409 INSUFFICIENT_BALANCE`.
 
 ### List card refunds
 
@@ -298,7 +303,7 @@ One request per ledger row. A second one is `409 REFUND_EXISTS`. A row that is n
 }
 ```
 
-Newest first. `status` is `pending`, `processing`, `paid`, `rejected`, or `failed`. Only `rejected` and `failed` release the credit so reverse can be tried again, and only if the 30-minute window is still open.
+Newest first. `status` is `pending`, `processing`, `paid`, `rejected`, or `failed`. The current API has no endpoint to change the status or release a reserved amount.
 
 ### Recover a missed bank return
 

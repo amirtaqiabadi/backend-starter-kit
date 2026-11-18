@@ -17,18 +17,23 @@ export type LedgerRow = {
 export async function listTeamTransactions(input: {
   userId: number;
   teamId: number;
-}): Promise<PaymentResult<LedgerRow[]>> {
+  page: number;
+  limit: number;
+}): Promise<PaymentResult<{ transactions: LedgerRow[]; pagination: { page: number; limit: number; hasNextPage: boolean } }>> {
   const owner = await requireOwnerTeam({ userId: input.userId, teamId: input.teamId });
   if (!owner.ok) {
     return owner;
   }
   const rows = await getPrisma().transaction.findMany({
     where: { teamId: input.teamId },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    skip: (input.page - 1) * input.limit,
+    take: input.limit + 1,
   });
   return {
     ok: true,
-    data: rows.map((row) => ({
+    data: {
+      transactions: rows.slice(0, input.limit).map((row) => ({
       id: row.id,
       type: row.type,
       amount: jsonAmount(row.amount),
@@ -36,6 +41,8 @@ export async function listTeamTransactions(input: {
       restrictedBalanceAfter: jsonAmount(row.restrictedBalanceAfter),
       gatewayAttemptId: row.gatewayAttemptId,
       createdAt: row.createdAt.toISOString(),
-    })),
+      })),
+      pagination: { page: input.page, limit: input.limit, hasNextPage: rows.length > input.limit },
+    },
   };
 }

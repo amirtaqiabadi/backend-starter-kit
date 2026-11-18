@@ -28,7 +28,7 @@ export function failureResponse(failure: AuthFailure): NextResponse {
 /** Why: a new login must rotate the session id into an HttpOnly cookie. */
 export function jsonWithSession(request: Request, body: unknown, sessionId: string): NextResponse {
   const config = authConfig();
-  const response = NextResponse.json(body);
+  const response = NextResponse.json(body, { headers: { "Cache-Control": "no-store" } });
   response.cookies.set({
     name: config.sessionCookieName,
     value: sessionId,

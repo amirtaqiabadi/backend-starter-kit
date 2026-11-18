@@ -13,6 +13,7 @@ model User {
   token         String    @unique @db.Char(5)
   referredById  Int?      @map("referred_by_id")
   name          String?
+  avatarUrl     String?   @map("avatar_url")
   passwordHash  String?   @map("password_hash")
   passwordSetAt DateTime? @map("password_set_at")
   lastLoginAt   DateTime? @map("last_login_at")

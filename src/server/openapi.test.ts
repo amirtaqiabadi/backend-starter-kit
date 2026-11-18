@@ -16,6 +16,7 @@ describe("openapi", () => {
       "/api/v1/payment/recover",
       "/api/v1/payment/refunds",
       "/api/v1/payment/reverse",
+      "/api/v1/user",
       "/api/v1/wallets",
       "/api/v1/wallets/{teamId}/transactions",
     ]);

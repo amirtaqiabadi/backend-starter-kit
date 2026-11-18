@@ -6,7 +6,39 @@ export type AuthUser = {
   id: number;
   phoneNumber: string;
   passwordHash: string | null;
+  name: string | null;
+  avatarUrl: string | null;
 };
+
+export type UserProfile = {
+  name: string | null;
+  phoneNumber: string;
+  avatarUrl: string | null;
+  hasPassword: boolean;
+  token: string;
+  walletIds: number[];
+};
+
+/** Return the same active wallet memberships as the wallet list, regardless of role. */
+export async function readUserProfile(userId: number): Promise<UserProfile | null> {
+  const user = await getPrisma().user.findUnique({
+    where: { id: userId },
+    select: {
+      name: true, phoneNumber: true, avatarUrl: true, passwordHash: true, token: true,
+      teamMemberships: {
+        where: { isActive: true, status: "active", team: { isActive: true } },
+        select: { teamId: true },
+        orderBy: { teamId: "asc" },
+      },
+    },
+  });
+  if (!user) return null;
+  return {
+    name: user.name, phoneNumber: user.phoneNumber, avatarUrl: user.avatarUrl,
+    hasPassword: user.passwordHash !== null, token: user.token.trim(),
+    walletIds: user.teamMemberships.map((membership) => membership.teamId),
+  };
+}
 
 const TOKEN_INSERT_ATTEMPTS = 5;
 

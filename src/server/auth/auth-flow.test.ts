@@ -361,6 +361,30 @@ describe("phone auth flow", () => {
     expect(body.token).toBe(row?.token.trim());
   });
 
+  it("returns the same profile on OTP and password login without exposing the password hash", async () => {
+    const phone = "09120000021";
+    const initial = await register(phone);
+    expect(initial.status).toBe(200);
+    const user = await getPrisma().user.findUniqueOrThrow({ where: { phoneNumber: phone } });
+    const token = user.token.trim();
+    expect(await initial.json()).toEqual({
+      name: null, phoneNumber: phone, avatarUrl: null, hasPassword: false, token, walletIds: [], redirectTo: "/",
+    });
+    expect(initial.headers.get("cache-control")).toBe("no-store");
+    expect((await setRoute(post("/api/v1/auth/password/set", { password: "long-password" }, sessionCookie(initial)))).status).toBe(200);
+    await getPrisma().user.update({ where: { phoneNumber: phone }, data: { name: "علی", avatarUrl: "https://example.com/avatar.png" } });
+    const wallet = await getPrisma().team.create({ data: { members: { create: { userId: user.id, role: "owner" } } } });
+    const inactive = await getPrisma().team.create({ data: { members: { create: { userId: user.id, isActive: false } } } });
+    expect(inactive.id).not.toBe(wallet.id);
+    const expected = { name: "علی", phoneNumber: phone, avatarUrl: "https://example.com/avatar.png", hasPassword: true, token, walletIds: [wallet.id], redirectTo: "/" };
+    const password = await login(phone, "long-password");
+    expect(password.status).toBe(200);
+    expect(await password.json()).toEqual(expected);
+    const otp = await register(phone);
+    expect(otp.status).toBe(200);
+    expect(await otp.json()).toEqual(expected);
+  });
+
   it("falls back when next is an open redirect", async () => {
     await setPassword("09120000016", "long-password");
     const protocolRelative = await login("09120000016", "long-password", "//evil.com");

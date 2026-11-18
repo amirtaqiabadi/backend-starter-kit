@@ -38,8 +38,9 @@ export async function POST(request: Request) {
   if (!begun.ok) {
     return begun.response;
   }
-  const transactionId = readInteger(begun.data.body, "transactionId");
-  if (transactionId === null || transactionId <= 0) {
+  const teamId = readInteger(begun.data.body, "teamId");
+  const amount = begun.data.body.amount;
+  if (teamId === null || !Number.isSafeInteger(teamId) || teamId <= 0 || typeof amount !== "number" || !Number.isSafeInteger(amount) || amount <= 0) {
     return paymentFailureResponse(
       paymentFail({
         status: 400,
@@ -53,7 +54,8 @@ export async function POST(request: Request) {
   }
   const result = await createRefundRequest({
     userId: begun.data.session.userId,
-    transactionId,
+    teamId,
+    amount,
     cardNumber: begun.data.body.cardNumber,
   });
   if (!result.ok) {

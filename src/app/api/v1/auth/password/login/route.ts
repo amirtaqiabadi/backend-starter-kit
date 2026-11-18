@@ -19,5 +19,5 @@ export async function POST(request: Request) {
     return failureResponse(result);
   }
   const redirectTo = safeNextPath(readString(begun.data.body, "next", ""));
-  return jsonWithSession(request, { redirectTo }, result.data.sessionId);
+  return jsonWithSession(request, { ...result.data.profile, redirectTo }, result.data.sessionId);
 }
