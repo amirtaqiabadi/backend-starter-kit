@@ -5,14 +5,14 @@ import { recordAuthEvent } from "@/server/auth/audit";
 import { verifyOtp } from "@/server/auth/otp-store";
 import { fail, type AuthResult } from "@/server/auth/result";
 import { createSession, grantPasswordReset } from "@/server/auth/session";
-import { findOrCreateUserByPhone, touchLastLogin } from "@/server/auth/users";
+import { findOrCreateUserByPhone, touchLastLogin, readUserProfile, type UserProfile } from "@/server/auth/users";
 import type { ClientMeta } from "@/server/http";
 
 export type OtpPurpose = "LOGIN" | "RESET_PASSWORD";
 
 export type OtpVerifyData = {
   sessionId: string;
-  hasPassword: boolean;
+  profile: UserProfile;
 };
 
 /** Why: a correct code signs the user in immediately, and a reset purpose also arms that new session. */
@@ -56,6 +56,8 @@ export async function verifyOtpLogin(input: {
     return fail({ status: 401, code: "OTP_EXPIRED", message: messages.otpExpired });
   }
   const user = await findOrCreateUserByPhone(phone, input.referralToken ?? null);
+  const profile = await readUserProfile(user.id);
+  if (!profile) throw new Error("USER_NOT_FOUND");
   await touchLastLogin(user.id);
   const sessionId = await createSession({
     userId: user.id,
@@ -74,6 +76,6 @@ export async function verifyOtpLogin(input: {
   });
   return {
     ok: true,
-    data: { sessionId, hasPassword: user.passwordHash !== null },
+    data: { sessionId, profile },
   };
 }

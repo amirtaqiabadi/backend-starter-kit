@@ -29,7 +29,7 @@ export async function POST(request: Request) {
   const redirectTo = safeNextPath(readString(begun.data.body, "next", ""));
   return jsonWithSession(
     request,
-    { hasPassword: result.data.hasPassword, redirectTo },
+    { ...result.data.profile, redirectTo },
     result.data.sessionId,
   );
 }

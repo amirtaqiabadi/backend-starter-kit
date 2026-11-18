@@ -10,7 +10,7 @@ export function openApiDocument() {
       description:
         "احراز هویت با شماره موبایل ایران و شارژ کیف‌پول زرین‌پال. همهٔ درخواست‌های POST باید هدر Origin هم‌مبدأ با Host داشته باشند. نشست موفق در کوکی HttpOnly به نام session قرار می‌گیرد. POSTهای کیف علاوه بر Origin به هدر x-csrf-token نیاز دارند.",
     },
-    tags: [{ name: "auth" }, { name: "wallets" }, { name: "payment" }],
+    tags: [{ name: "auth" }, { name: "user" }, { name: "wallets" }, { name: "payment" }],
     paths: withApiPrefix({
       "/auth/identify": {
         post: {
@@ -49,8 +49,8 @@ export function openApiDocument() {
           responses: {
             "200": sessionResponse("مسیر امن بعد از ورود", {
               type: "object",
-              required: ["redirectTo"],
-              properties: { redirectTo: { type: "string" } },
+              required: ["name", "phoneNumber", "avatarUrl", "hasPassword", "token", "walletIds", "redirectTo"],
+              properties: { name: { type: "string", nullable: true }, phoneNumber: phoneSchema, avatarUrl: { type: "string", nullable: true }, hasPassword: { type: "boolean" }, token: tokenSchema, walletIds: { type: "array", items: { type: "integer" } }, redirectTo: { type: "string" } },
             }),
             "400": errorResponse,
             "401": errorResponse,
@@ -107,9 +107,14 @@ export function openApiDocument() {
           responses: {
             "200": sessionResponse("نشست و وضعیت رمز", {
               type: "object",
-              required: ["hasPassword", "redirectTo"],
+              required: ["name", "phoneNumber", "avatarUrl", "hasPassword", "token", "walletIds", "redirectTo"],
               properties: {
+                name: { type: "string", nullable: true },
+                phoneNumber: phoneSchema,
+                avatarUrl: { type: "string", nullable: true },
                 hasPassword: { type: "boolean" },
+                token: tokenSchema,
+                walletIds: { type: "array", items: { type: "integer" }, description: "شناسه کیف‌های فعال کاربر، با هر نقش" },
                 redirectTo: { type: "string" },
               },
             }),
@@ -170,6 +175,48 @@ export function openApiDocument() {
           },
         },
       },
+      "/user": {
+        get: {
+          tags: ["user"],
+          summary: "دریافت اطلاعات کاربر واردشده",
+          description: "آدرس آواتار و نام در صورت ثبت‌نشدن null هستند. وضعیت رمز فقط به صورت hasPassword برمی‌گردد.",
+          security: [{ sessionCookie: [] }],
+          responses: {
+            "200": jsonResponse("اطلاعات کاربر", {
+              type: "object",
+              required: ["name", "phoneNumber", "avatarUrl", "hasPassword", "token", "walletIds"],
+              properties: {
+                name: { type: "string", nullable: true },
+                phoneNumber: phoneSchema,
+                avatarUrl: { type: "string", nullable: true },
+                hasPassword: { type: "boolean" },
+                token: tokenSchema,
+                walletIds: { type: "array", items: { type: "integer" }, description: "شناسه کیف‌های فعال کاربر، با هر نقش" },
+              },
+            }),
+            "401": paymentErrorResponse,
+          },
+        },
+        patch: {
+          tags: ["user"],
+          summary: "به‌روزرسانی اطلاعات کاربر واردشده",
+          description: "فعلاً فقط نام قابل تغییر است. هدر Origin و کوکی و هدر x-csrf-token لازم هستند؛ شماره موبایل قابل تغییر نیست.",
+          security: [{ sessionCookie: [] }],
+          requestBody: jsonBody({
+            required: ["name"],
+            additionalProperties: false,
+            properties: { name: { type: "string", minLength: 1, maxLength: 80 } },
+          }),
+          responses: {
+            "200": jsonResponse("اطلاعات به‌روزشده", {
+              type: "object", required: ["name"], properties: { name: { type: "string" } },
+            }),
+            "400": paymentErrorResponse,
+            "401": paymentErrorResponse,
+            "403": paymentErrorResponse,
+          },
+        },
+      },
       "/wallets": {
         get: {
           tags: ["wallets"],
@@ -206,13 +253,23 @@ export function openApiDocument() {
           tags: ["wallets"],
           summary: "تاریخچهٔ دفترکل یک کیف",
           security: [{ sessionCookie: [] }],
-          parameters: [{ name: "teamId", in: "path", required: true, schema: { type: "integer" } }],
+          parameters: [
+            { name: "teamId", in: "path", required: true, schema: { type: "integer", minimum: 1 } },
+            { name: "page", in: "query", schema: { type: "integer", minimum: 1, default: 1 } },
+            { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100, default: 20 } },
+          ],
           responses: {
             "200": jsonResponse("ردیف‌های دفترکل", {
               type: "object",
-              required: ["transactions"],
-              properties: { transactions: { type: "array", items: { $ref: "#/components/schemas/LedgerRow" } } },
+              required: ["transactions", "pagination"],
+              properties: {
+                transactions: { type: "array", items: { $ref: "#/components/schemas/LedgerRow" } },
+                pagination: { type: "object", required: ["page", "limit", "hasNextPage"], properties: {
+                  page: { type: "integer" }, limit: { type: "integer" }, hasNextPage: { type: "boolean" },
+                } },
+              },
             }),
+            "400": paymentErrorResponse,
             "401": paymentErrorResponse,
             "403": paymentErrorResponse,
           },
@@ -267,7 +324,7 @@ export function openApiDocument() {
       "/payment/reverse": {
         post: {
           tags: ["payment"],
-          summary: "برگشت درگاه تا ۳۰ دقیقه، مگر اینکه استرداد کارت باز باشد",
+          summary: "برگشت درگاه تا ۳۰ دقیقه",
           security: [{ sessionCookie: [] }],
           requestBody: jsonBody({
             required: ["attemptId"],
@@ -305,12 +362,13 @@ export function openApiDocument() {
         },
         post: {
           tags: ["payment"],
-          summary: "ثبت درخواست استرداد دستی به کارت، مگر اینکه برگشت درگاه شروع شده باشد",
+          summary: "ثبت درخواست استرداد دستی از موجودی قابل برداشت کیف پول",
           security: [{ sessionCookie: [] }],
           requestBody: jsonBody({
-            required: ["transactionId", "cardNumber"],
+            required: ["teamId", "amount", "cardNumber"],
             properties: {
-              transactionId: { type: "integer" },
+              teamId: { type: "integer", minimum: 1 },
+              amount: { type: "integer", minimum: 1, maximum: 9007199254740991, description: "مبلغ به ریال" },
               cardNumber: { type: "string", pattern: "^\\d{16}$" },
             },
           }),
@@ -417,7 +475,7 @@ export function openApiDocument() {
           properties: {
             id: { type: "integer" },
             teamId: { type: "integer" },
-            transactionId: { type: "integer" },
+            transactionId: { type: "integer", description: "شناسه ردیف بدهکار استرداد در دفترکل" },
             amount: { type: "integer" },
             status: { type: "string" },
             cardNumber: { type: "string" },
