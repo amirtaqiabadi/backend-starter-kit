@@ -43,10 +43,13 @@ export async function uploadAvatar(userId: number, body: Buffer) {
 
 /** Only delete keys created for this user under the currently configured public bucket URL. */
 export async function deleteAvatar(userId: number, avatarUrl: string): Promise<void> {
-  const { client, bucket, publicUrl } = storage();
+  const configuredUrl = process.env.LIARA_PUBLIC_URL;
+  if (!configuredUrl) return;
+  const publicUrl = new URL(configuredUrl).toString().replace(/\/$/, "");
   const prefix = `${publicUrl}/avatars/${userId}/`;
   if (!avatarUrl.startsWith(prefix)) return;
   const filename = avatarUrl.slice(prefix.length);
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.webp$/i.test(filename)) return;
+  const { client, bucket } = storage();
   await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: `avatars/${userId}/${filename}` }));
 }

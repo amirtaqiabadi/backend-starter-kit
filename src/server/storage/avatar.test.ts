@@ -18,4 +18,13 @@ describe("deleting avatar objects", () => {
     for (const url of [`https://cdn.example/base/avatars/8/${id}`, `https://evil.example/base/avatars/7/${id}`, "https://cdn.example/base/avatars/7/other.webp", `https://cdn.example/base/avatars/7/${id}?x=1`]) await deleteAvatar(7, url);
     expect(mocks.send).toHaveBeenCalledOnce();
   });
+  it("clears external avatars without requiring storage credentials", async () => {
+    for (const key of ["LIARA_ENDPOINT", "LIARA_BUCKET_NAME", "LIARA_ACCESS_KEY", "LIARA_SECRET_KEY", "LIARA_PUBLIC_URL"]) vi.stubEnv(key, "");
+    await expect(deleteAvatar(7, "https://example.com/avatar.png")).resolves.toBeUndefined();
+    vi.stubEnv("LIARA_PUBLIC_URL", "https://cdn.example/base");
+    await expect(deleteAvatar(7, "https://example.com/avatar.png")).resolves.toBeUndefined();
+    await expect(deleteAvatar(7, "https://cdn.example/base/avatars/7/d4147a0a-20d8-4d1b-a9cd-1511d207b354.webp")).rejects.toThrow("Object storage is not configured");
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+
 });
