@@ -217,6 +217,30 @@ export function openApiDocument() {
           },
         },
       },
+      "/user/avatar": {
+        delete: {
+          tags: ["user"],
+          summary: "حذف تصویر پروفایل",
+          description: "آواتار کاربر واردشده را حذف می‌کند. Origin و کوکی و هدر x-csrf-token لازم هستند؛ بدنه لازم نیست.",
+          security: [{ sessionCookie: [] }],
+          responses: {
+            "200": jsonResponse("آواتار حذف شد", { type: "object", required: ["avatarUrl"], properties: { avatarUrl: { type: "string", nullable: true } } }),
+            "401": paymentErrorResponse, "403": paymentErrorResponse, "409": paymentErrorResponse, "503": paymentErrorResponse,
+          },
+        },
+        post: {
+          tags: ["user"],
+          summary: "بارگذاری تصویر پروفایل",
+          description: "یک فایل تصویر تا ۵ مگابایت در فیلد file ارسال کنید. تصویر به WebP تبدیل و نشانی آن در پروفایل ذخیره می‌شود. Origin و کوکی و هدر x-csrf-token لازم هستند.",
+          security: [{ sessionCookie: [] }],
+          requestBody: { required: true, content: { "multipart/form-data": { schema: { type: "object", required: ["file"], properties: { file: { type: "string", format: "binary" } } } } } },
+          responses: {
+            "200": jsonResponse("نشانی تصویر", { type: "object", required: ["avatarUrl"], properties: { avatarUrl: { type: "string", format: "uri" } } }),
+            "400": paymentErrorResponse, "401": paymentErrorResponse, "403": paymentErrorResponse,
+            "413": paymentErrorResponse, "503": paymentErrorResponse,
+          },
+        },
+      },
       "/wallets": {
         get: {
           tags: ["wallets"],
